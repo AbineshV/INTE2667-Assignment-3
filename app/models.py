@@ -16,7 +16,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
 
-    # Access control (S2, R5) and division scoping (S2, R2)
+    # Access control (S2, R5) and division scoping (S2, R5)
     role = db.Column(db.String(20), nullable=False, default="voter")
     division = db.Column(db.String(100))
 
