@@ -5,9 +5,9 @@ INTE2667 Assignment 3
 ## Team
 | Name | Student ID | GitHub |
 |---|---|---|
-| Abinesh V | <ID> | AbineshV |
-| <Name> | <ID> | hariharan2k03 |
-| <Name> | <ID> | roshandanraj |
+| Abinesh V | s4221033 | AbineshV |
+| Hariharan Govindasamy Venkatraman | <ID> | hariharan2k03 |
+| Roshan Daniel Raj| <ID> | roshandanraj |
 | <Name> | <ID> | aravind-P-tester |
 | <Name> | <ID> | <username> |
 
@@ -21,4 +21,18 @@ INTE2667 Assignment 3
 Python, Flask, SQLAlchemy, SQLite, pytest, GitHub Actions
 
 ## How to run
-To be added with the app skeleton.
+Requires Python 3.9 or newer.
+
+1. Clone the repo and open the folder in VS Code.
+2. Create and activate a virtual environment:
+   python3 -m venv .venv
+   source .venv/bin/activate        (Windows: .venv\Scripts\activate)
+3. Install dependencies:
+   pip install -r requirements.txt
+4. Copy .env.example to .env, then set SECRET_KEY to a long random value:
+   python3 -c "import secrets; print(secrets.token_hex(32))"
+5. Run the app:
+   flask --app run run --debug
+   Open http://127.0.0.1:5000/auth/login
+6. Run the tests:
+   pytest -v
