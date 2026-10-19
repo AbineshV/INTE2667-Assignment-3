@@ -8,8 +8,8 @@ INTE2667 Assignment 3
 | Abinesh V | s4221033 | AbineshV |
 | Hariharan Govindasamy Venkatraman | <ID> | hariharan2k03 |
 | Roshan Daniel Raj| <ID> | roshandanraj |
-| <Name> | <ID> | aravind-P-tester |
-| <Name> | <ID> | <username> |
+| Aravind | <ID> | aravind-P-tester |
+| Venkatesh | <ID> | <username> |
 
 ## Subsystems
 - S1 Voter Enrolment & Administration
