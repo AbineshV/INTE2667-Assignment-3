@@ -1,0 +1,60 @@
+# Secure integration pipeline
+# Every push and pull request must pass the unit tests, a static security
+# scan of our code (Bandit) and a scan of our dependencies for known
+# vulnerabilities (pip-audit) before it can be merged into main.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# Least privilege: the workflow only needs to read the code
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest -v
+
+  security:
+    name: Security scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install scanners
+        run: pip install bandit==1.9.4 pip-audit==2.10.1
+
+      # Full report for the logs, including low-severity findings
+      - name: Bandit report
+        run: bandit -r app
+        continue-on-error: true
+
+      # Fail the build on medium or high severity findings
+      - name: Bandit gate
+        run: bandit -r app -ll
+
+      # Fail the build if any pinned dependency has a known vulnerability
+      - name: pip-audit
+        run: pip-audit -r requirements.txt
