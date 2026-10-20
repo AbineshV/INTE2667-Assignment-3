@@ -6,10 +6,10 @@ INTE2667 Assignment 3
 | Name | Student ID | GitHub |
 |---|---|---|
 | Abinesh V | s4221033 | AbineshV |
-| Hariharan Govindasamy Venkatraman | <ID> | hariharan2k03 |
+| Hariharan Govindasamy Venkatraman | s4205841 | hariharan2k03 |
 | Roshan Daniel Raj| <ID> | roshandanraj |
-| <Name> | <ID> | aravind-P-tester |
-| <Name> | <ID> | <username> |
+| Aravind Gurumurthy Kanagambal | s4175149 | aravind-P-tester |
+| Venkatesh | <ID> | <username> |
 
 ## Subsystems
 - S1 Voter Enrolment & Administration
