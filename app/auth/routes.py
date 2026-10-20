@@ -4,7 +4,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
-from app.auth.passwords import hash_password, validate_password
+from app.auth.passwords import hash_password, needs_rehash, validate_password, verify_password
 from app.extensions import db
 from app.models import User
 
