@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Set up two-factor authentication | Electronic Voting Platform{% endblock %}
+
+{% block content %}
+  <h1>Set up two-factor authentication</h1>
+
+  <p>Scan this QR code with an authenticator app such as Google Authenticator or Microsoft Authenticator.</p>
+  <img src="{{ qr }}" alt="QR code for authenticator app">
+
+  <p>Can't scan it? Enter this key in your app instead:</p>
+  <p><code>{{ secret }}</code></p>
+
+  <form method="post" action="{{ url_for('auth.mfa_setup') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="code">Enter the 6-digit code from your app</label>
+    <input type="text" id="code" name="code"
+           inputmode="numeric" autocomplete="one-time-code"
+           maxlength="6" required>
+
+    <button type="submit">Confirm</button>
+  </form>
+{% endblock %}
