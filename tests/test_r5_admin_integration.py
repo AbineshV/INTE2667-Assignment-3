@@ -48,3 +48,12 @@ def test_admin_can_access_real_admin_route(app, client):
 
     assert response.status_code == 200
     assert b"Admin module coming soon." in response.data
+
+def test_unclassified_route_is_denied(app, client):
+    @app.route("/r5-test-unclassified")
+    def unclassified_route():
+        return "This route should be blocked"
+
+    response = client.get("/r5-test-unclassified")
+
+    assert response.status_code == 403

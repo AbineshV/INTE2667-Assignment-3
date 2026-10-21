@@ -35,7 +35,6 @@ def require_division_access(*allowed_roles):
     """
     if not allowed_roles:
         raise ValueError("At least one allowed role must be specified.")
-
     def decorator(view_func):
         @wraps(view_func)
         @login_required
@@ -66,3 +65,8 @@ def require_division_access(*allowed_roles):
         return wrapped_view
 
     return decorator
+
+def public_endpoint(view_func):
+    """Mark a route as intentionally accessible without authentication."""
+    view_func.is_public_endpoint = True
+    return view_func

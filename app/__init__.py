@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, abort, request
 
 from app.config import Config
 from app.extensions import db, login_manager, csrf
@@ -29,6 +29,35 @@ def create_app(config_class=Config):
     app.register_blueprint(voting_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(results_bp)
+
+    @app.before_request
+    def enforce_explicit_access_policy():
+        endpoint = request.endpoint
+
+        # Let Flask return its normal 404 for unknown URLs.
+        if endpoint is None:
+            return
+
+        # Static assets are public.
+        if endpoint == "static":
+            return
+
+        view_func = app.view_functions.get(endpoint)
+
+        # Deny if the route cannot be identified.
+        if view_func is None:
+            abort(403)
+
+        # Permit routes explicitly marked public.
+        if getattr(view_func, "is_public_endpoint", False):
+            return
+
+        # Routes with explicit role policies are checked by their decorators.
+        if getattr(view_func, "allowed_roles", None):
+            return
+
+        # Secure default: no declared policy means no access.
+        abort(403)
 
     # Create tables for local development
     with app.app_context():
