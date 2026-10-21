@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Enter your code | Electronic Voting Platform{% endblock %}
+
+{% block content %}
+  <h1>Two-factor authentication</h1>
+
+  <form method="post" action="{{ url_for('auth.mfa_verify') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="code">Enter the 6-digit code from your authenticator app</label>
+    <input type="text" id="code" name="code"
+           inputmode="numeric" autocomplete="one-time-code"
+           maxlength="6" required autofocus>
+
+    <button type="submit">Verify</button>
+  </form>
+{% endblock %}
