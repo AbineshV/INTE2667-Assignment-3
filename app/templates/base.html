@@ -4,28 +4,39 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Electronic Voting Platform{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <header>
-        <nav>
-      {% if current_user.is_authenticated %}
-        <a href="{{ url_for('voting.index') }}">Vote</a>
-        <a href="{{ url_for('results.index') }}">Results</a>
-        <form method="post" action="{{ url_for('auth.logout') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit">Log out</button>
-        </form>
-      {% else %}
-        <a href="{{ url_for('auth.login') }}">Log in</a>
-        <a href="{{ url_for('auth.register') }}">Register</a>
-      {% endif %}
-    </nav>
+  <header class="site-header">
+    <div class="inner">
+      <a class="brand" href="{{ url_for('auth.login') }}">
+        <span class="brand-mark" aria-hidden="true">✓</span>
+        Electronic Voting Platform
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        {% if current_user.is_authenticated %}
+          {% set nav = [('voting.index', 'Vote'), ('results.index', 'Results'), ('results.track', 'Track ballot')] %}
+        {% else %}
+          {% set nav = [('auth.login', 'Log in'), ('auth.register', 'Register'), ('results.track', 'Track ballot')] %}
+        {% endif %}
+        {% for endpoint, label in nav %}
+          <a href="{{ url_for(endpoint) }}"
+             {% if request.endpoint == endpoint %}class="active" aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+        {% if current_user.is_authenticated %}
+          <form class="nav-logout" method="post" action="{{ url_for('auth.logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit">Log out</button>
+          </form>
+        {% endif %}
+      </nav>
+    </div>
   </header>
 
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <ul>
+        <ul class="flashes">
           {% for category, message in messages %}
             <li class="flash-{{ category }}">{{ message }}</li>
           {% endfor %}
@@ -33,7 +44,15 @@
       {% endif %}
     {% endwith %}
 
-    {% block content %}{% endblock %}
+    {% block main %}
+      <div class="card">
+        {% block content %}{% endblock %}
+      </div>
+    {% endblock %}
   </main>
+
+  <footer class="site-footer">
+    INTE2667 Secure Software Systems · Electronic Voting Platform prototype
+  </footer>
 </body>
 </html>
