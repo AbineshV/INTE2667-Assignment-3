@@ -4,9 +4,11 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
+
 from app.auth.passwords import hash_password, needs_rehash, validate_password, verify_password
 from app.extensions import db
 from app.models import User
+from app.auth.lockout import is_locked, record_failed_login, reset_failed_logins, utc_now
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -23,26 +25,33 @@ def login():
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     user = User.query.filter_by(email=email).first()
-
-    # R4: lockout check goes here, before the password is verified
+    now = utc_now()
 
     if user is None:
         verify_password(_DUMMY_HASH, password)
         flash("Invalid email or password.", "error")
         return render_template("auth/login.html"), 401
 
-    if not verify_password(user.password_hash, password):
+    if is_locked(user, now):
+        verify_password(_DUMMY_HASH, password)  # same timing; real password not checked
+        # TODO: audit log via S5's logger
         flash("Invalid email or password.", "error")
         return render_template("auth/login.html"), 401
 
+    if not verify_password(user.password_hash, password):
+        record_failed_login(user, now)
+        db.session.commit()
+        flash("Invalid email or password.", "error")
+        return render_template("auth/login.html"), 401
+
+    reset_failed_logins(user)
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
-        db.session.commit()
+    db.session.commit()
 
     login_user(user)
     flash("Logged in.", "success")
     return redirect(url_for("voting.index"))
-
 
 @bp.route("/logout", methods=["POST"])
 def logout():
