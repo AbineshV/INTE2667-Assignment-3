@@ -72,6 +72,7 @@ def create_app(config_class=Config):
         from app import models  # noqa: F401  (registers the models)
         from app.audit import models as audit_models  # noqa: F401
         from app.elections import models as election_models  # noqa: F401
+        from app.ledger import models as ledger_models  # noqa: F401
         db.create_all()
 
     return app
