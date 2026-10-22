@@ -198,24 +198,74 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["status"] == "executed"
 
+def test_non_delegate_cannot_approve_action(app, client):
+    with app.app_context():
+        requester = make_user("approval-requester@example.com")
+        voter = make_user("approval-voter@example.com", role="voter")
+        target = make_user("approval-target@example.com", role="voter")
+
+        # Save IDs before the application context closes.
+        voter_id = voter.id
+        target_id = target.id
+
+        action = request_action(
+            requester,
+            "bulk_enrolment_change",
+            {
+                "changes": [
+                    {"user_id": target_id, "is_enrolled": False}
+                ]
+            },
+        )
+        action_id = action.id
+
+    # Sign in as a voter, not a delegate.
+    with client.session_transaction() as session:
+        session["_user_id"] = str(voter_id)
+        session["_fresh"] = True
+
+    response = client.post(f"/admin/actions/{action_id}/approve")
+    assert response.status_code == 403
+
+    with app.app_context():
+        saved_action = db.session.get(PendingAction, action_id)
+        saved_target = db.session.get(User, target_id)
+
+        assert saved_action.status == "pending"
+        assert saved_target.is_enrolled is True
 
 def test_non_delegate_cannot_request_action(app, client):
     with app.app_context():
-        voter = make_user("route-voter-only@example.com", role="voter")
-        target = make_user("route-target@example.com", role="voter")
+        voter = make_user("request-voter@example.com", role="voter")
+        target = make_user("request-target@example.com", role="voter")
 
-        _log_in_as(client, voter)
+        voter_id = voter.id
+        target_id = target.id
 
-        response = client.post(
-            "/admin/actions",
-            json={
-                "action_type": "bulk_enrolment_change",
-                "payload": {
-                    "changes": [
-                        {"user_id": target.id, "is_enrolled": False}
-                    ]
-                },
+    # Sign in as a voter, not a delegate.
+    with client.session_transaction() as session:
+        session["_user_id"] = str(voter_id)
+        session["_fresh"] = True
+
+    response = client.post(
+        "/admin/actions",
+        json={
+            "action_type": "bulk_enrolment_change",
+            "payload": {
+                "changes": [
+                    {"user_id": target_id, "is_enrolled": False}
+                ]
             },
-        )
+        },
+    )
 
-        assert response.status_code == 403
+    assert response.status_code == 403
+
+    with app.app_context():
+        action = db.session.execute(
+            db.select(PendingAction).where(
+                PendingAction.requested_by_id == voter_id
+            )
+        ).scalar_one_or_none()
+
+        assert action is None
