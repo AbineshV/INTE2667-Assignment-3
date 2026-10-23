@@ -46,18 +46,16 @@ def _create_key(path, passphrase):
     return key
 
 
-def load_signing_key(app):
-    # Tests get a throwaway key; otherwise load or create instance/audit_signing_key.pem
+def load_signing_key(app, filename=DEFAULT_KEY_FILENAME, config_key="AUDIT_SIGNING_KEY_PATH"):
+    # Tests get a throwaway key; otherwise load or create the PEM file in instance/
     if app.config.get("TESTING"):
         return Ed25519PrivateKey.generate()
 
-    path = app.config.get("AUDIT_SIGNING_KEY_PATH") or os.path.join(
-        app.instance_path, DEFAULT_KEY_FILENAME
-    )
+    path = app.config.get(config_key) or os.path.join(app.instance_path, filename)
     passphrase = _passphrase()
     if os.path.exists(path):
         return _load_key(path, passphrase)
-    app.logger.warning("No audit signing key found, creating a new one at %s", path)
+    app.logger.warning("No signing key found, creating a new one at %s", path)
     return _create_key(path, passphrase)
 
 

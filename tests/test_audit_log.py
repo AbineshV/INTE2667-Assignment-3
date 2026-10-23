@@ -189,6 +189,12 @@ class FileKeyConfig(TestingConfig):
     TESTING = False
 
 
+@pytest.fixture(autouse=True)
+def election_key_in_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(FileKeyConfig, "ELECTION_SIGNING_KEY_PATH",
+                        str(tmp_path / "election.pem"), raising=False)
+
+
 def test_key_file_is_created_owner_only_and_reused(tmp_path):
     key_path = tmp_path / "keys" / "audit.pem"
 

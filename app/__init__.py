@@ -21,6 +21,10 @@ def create_app(config_class=Config):
     from app.audit import init_audit
     init_audit(app)
 
+    # Election definition signing key (R19)
+    from app.elections import init_elections
+    init_elections(app)
+
     # Blueprints
     from app.auth.routes import bp as auth_bp
     from app.enrolment.routes import bp as enrolment_bp
@@ -38,6 +42,7 @@ def create_app(config_class=Config):
     with app.app_context():
         from app import models  # noqa: F401  (registers the models)
         from app.audit import models as audit_models  # noqa: F401
+        from app.elections import models as election_models  # noqa: F401
         db.create_all()
 
     return app
