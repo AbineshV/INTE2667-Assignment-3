@@ -1,3 +1,4 @@
+from app.access.permissions import public_endpoint, require_roles
 from datetime import date
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
@@ -18,6 +19,7 @@ _DUMMY_HASH = hash_password("dummy-password-for-timing-only")
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@public_endpoint
 def login():
     if request.method == "GET":
         return render_template("auth/login.html")
@@ -54,12 +56,14 @@ def login():
     return redirect(url_for("voting.index"))
 
 @bp.route("/logout", methods=["POST"])
+@require_roles("voter", "officer", "delegate", "admin")
 def logout():
     logout_user()
     flash("Logged out.", "success")
     return redirect(url_for("auth.login"))
 
 @bp.route("/register", methods=["GET", "POST"])
+@public_endpoint
 def register():
     if request.method == "GET":
         return render_template("auth/register.html")

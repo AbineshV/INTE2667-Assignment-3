@@ -1,8 +1,9 @@
 from app.security.network_access import require_diplomatic_terminal_ip
-
+from app.access.permissions import public_endpoint
 
 def _register_terminal_route(app):
     @app.get("/test-diplomatic-terminal")
+    @public_endpoint
     @require_diplomatic_terminal_ip
     def test_terminal():
         return "terminal-access-granted"
