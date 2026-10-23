@@ -17,7 +17,7 @@
         {% if current_user.is_authenticated %}
           {% set nav = [('voting.index', 'Vote'), ('results.index', 'Results'), ('results.track', 'Track ballot')] %}
         {% else %}
-          {% set nav = [('auth.login', 'Log in'), ('auth.register', 'Register'), ('results.track', 'Track ballot')] %}
+          {% set nav = [('auth.login', 'Log in'), ('auth.register', 'Register'), ('results.index', 'Results'), ('results.track', 'Track ballot')] %}
         {% endif %}
         {% for endpoint, label in nav %}
           <a href="{{ url_for(endpoint) }}"

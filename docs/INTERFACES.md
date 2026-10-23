@@ -65,6 +65,16 @@
 - `verify_ledger(election_id)` returns `ok`, `failed_sequence`, `reason`, `head_hash`; R20 signs `head_hash` with the results
 - Voters check their code at `/results/track`
 
+## Signed results (R20, S5)
+- Import: `from app.results.publication import publish_results, verify_publication, ResultsError`
+- `publish_results(election, admin, tallies)`: admin only, once per election; `tallies` is `{division_id: {candidate_id: votes}}` covering every division and candidate
+- **S3:** after decrypting and counting, pass your counts here; it refuses if the definition (R19) or ledger (R17) fails verification, or a division has more votes than ballots
+- The signed document includes the definition hash and the ledger head hash, so results are tied to exactly those ballots
+- API: `GET /results/api/<election_id>` returns `document` (the exact signed string), `signature`, `algorithm`, `key_id`
+- Public key: `GET /results/api/public-key`
+- Pages: `/results/` (list) and `/results/<election_id>` (tables plus live verification)
+- **S4:** please include `/results/api/...` in rate limiting (R16)
+
 ## Testing
 - Fixtures in tests/conftest.py: app, client
 - *write one line: database queries in tests need `with app.app_context():`*

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}{{ data.election.name }} results | Electronic Voting Platform{% endblock %}
+
+{% block main %}
+  <div class="card card-wide">
+    <h1>{{ data.election.name }}</h1>
+    <p class="lead">{{ data.election.chamber | capitalize }} · {{ data.ledger.ballots }} ballots · published {{ data.published_at[:10] }}</p>
+
+    {% if verification.ok %}
+      <div class="alert alert-success" role="status">
+        <strong>Signature verified.</strong>
+        <p>These results are signed and still match the locked election definition and the ballot ledger.</p>
+      </div>
+    {% else %}
+      <div class="alert alert-error" role="alert">
+        <strong>Verification failed.</strong>
+        <p>{{ verification.reason }}</p>
+      </div>
+    {% endif %}
+
+    {% for division in data.divisions %}
+      {% set total = division.candidates | sum(attribute='votes') %}
+      <h2>{{ division.name }}</h2>
+      <table>
+        <thead>
+          <tr><th>Candidate</th><th>Party</th><th class="num">Votes</th><th class="num">Share</th></tr>
+        </thead>
+        <tbody>
+          {% for c in division.candidates | sort(attribute='votes', reverse=True) %}
+            <tr>
+              <td>{{ c.name }}</td>
+              <td>{{ c.party or "Independent" }}</td>
+              <td class="num">{{ c.votes }}</td>
+              <td class="num">{{ "%.1f" | format(100 * c.votes / total) if total else "0.0" }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+
+    <h2>Verify it yourself</h2>
+    <dl class="facts">
+      <dt>Algorithm</dt><dd>Ed25519 (key {{ publication.key_id }})</dd>
+      <dt>Document hash</dt><dd><code class="fingerprint">{{ publication.document_hash }}</code></dd>
+      <dt>Ledger head</dt><dd><code class="fingerprint">{{ data.ledger.head_hash }}</code></dd>
+      <dt>Definition hash</dt><dd><code class="fingerprint">{{ data.election.definition_hash }}</code></dd>
+    </dl>
+    <p class="hint api-links">
+      Signed document: <a href="{{ url_for('results.api_results', election_id=publication.election_id) }}">JSON</a> ·
+      Public key: <a href="{{ url_for('results.api_public_key') }}">JSON</a>
+    </p>
+  </div>
+{% endblock %}

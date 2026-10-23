@@ -202,6 +202,31 @@ button:hover, .button:hover { background: var(--primary-hover); }
   word-break: break-all;
 }
 
+.card-wide { max-width: 860px; }
+
+h2 { font-size: 1.15rem; margin: 32px 0 10px; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+
+th { color: var(--muted); font-weight: 600; font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; }
+
+tbody tr:hover { background: var(--primary-soft); }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+
+.facts dt { color: var(--muted); font-weight: 600; font-size: .9rem; padding-top: 6px; }
+
+.facts dd { margin: 0; }
+
+.facts .fingerprint { margin-top: 0; }
+
+.api-links { margin-top: 24px; }
+
 /* Footer */
 .site-footer {
   border-top: 1px solid var(--border);
@@ -213,6 +238,8 @@ button:hover, .button:hover { background: var(--primary-hover); }
 
 @media (max-width: 600px) {
   main { padding: 24px 16px; }
+  .facts { grid-template-columns: 1fr; }
+  th, td { padding: 8px 6px; }
   .card { padding: 22px; }
   h1 { font-size: 1.45rem; }
 }
