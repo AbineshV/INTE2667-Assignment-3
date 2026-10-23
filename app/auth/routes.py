@@ -3,12 +3,19 @@ from datetime import date
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import login_user, logout_user
 from sqlalchemy.exc import IntegrityError
+from flask import (Blueprint, flash, make_response, redirect, render_template,
+                   request, session, url_for)
+from flask_login import current_user, login_required, login_user, logout_user
 
+from app.auth.mfa import (check_code, decrypt_secret, encrypt_secret,
+                          generate_secret, qr_data_uri)
 
 from app.auth.passwords import hash_password, needs_rehash, validate_password, verify_password
 from app.extensions import db
 from app.models import User
 from app.auth.lockout import is_locked, record_failed_login, reset_failed_logins, utc_now
+
+import pyotp 
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -58,6 +65,45 @@ def logout():
     logout_user()
     flash("Logged out.", "success")
     return redirect(url_for("auth.login"))
+
+def _render_mfa_setup(secret, status=200):
+    uri = pyotp.TOTP(secret).provisioning_uri(
+        name=current_user.email, issuer_name="E-Voting Prototype"
+    )
+    response = make_response(
+        render_template("auth/mfa_setup.html", qr=qr_data_uri(uri), secret=secret),
+        status,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.route("/mfa/setup", methods=["GET", "POST"])
+@login_required
+def mfa_setup():
+    if current_user.totp_secret:
+        flash("Two-factor authentication is already enabled.", "info")
+        return redirect(url_for("voting.index"))
+
+    if "pending_totp_secret" not in session:
+        session["pending_totp_secret"] = encrypt_secret(generate_secret())
+    secret = decrypt_secret(session["pending_totp_secret"])
+
+    if request.method == "GET":
+        return _render_mfa_setup(secret)
+
+    step = check_code(secret, request.form.get("code", ""), utc_now(), None)
+    if step is None:
+        flash("Invalid code.", "error")
+        return _render_mfa_setup(secret, 400)
+
+    current_user.totp_secret = encrypt_secret(secret)
+    current_user.totp_last_used_step = step
+    db.session.commit()
+    session.pop("pending_totp_secret", None)
+
+    flash("Two-factor authentication enabled.", "success")
+    return redirect(url_for("voting.index"))
 
 @bp.route("/register", methods=["GET", "POST"])
 def register():
