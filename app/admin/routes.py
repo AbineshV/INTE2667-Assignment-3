@@ -5,10 +5,13 @@ from app.admin.approval_service import approve_action, request_action
 from app.extensions import db
 from app.models import PendingAction
 
+from app.access.permissions import require_roles
+
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 
 @bp.route("/")
+@require_roles("admin")
 def index():
     return "Admin module coming soon."
 
