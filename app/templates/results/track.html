@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Track your ballot | Electronic Voting Platform{% endblock %}
+
+{% block content %}
+  <h1>Track your ballot</h1>
+  <p class="lead">Enter the tracking code you were given after voting to confirm your ballot was recorded.</p>
+
+  <form method="post" action="{{ url_for('results.track') }}" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label for="tracking_code">Tracking code</label>
+    <input type="text" id="tracking_code" name="tracking_code" class="code-input"
+           required maxlength="40" spellcheck="false"
+           placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+    <p class="hint">Your code is never shown in the address bar or stored on our servers.</p>
+
+    <button type="submit">Check my ballot</button>
+  </form>
+
+  {% if searched %}
+    {% if result %}
+      <div class="alert alert-success" role="status">
+        <strong>Your ballot has been recorded.</strong>
+        <p>It is ballot {{ result.sequence }} in the ledger. Its contents stay encrypted.</p>
+        <p>Ballot fingerprint:<code class="fingerprint">{{ result.ciphertext_hash }}</code></p>
+      </div>
+    {% else %}
+      <div class="alert alert-error" role="alert">
+        <strong>No ballot found.</strong>
+        <p>Check the code and try again.</p>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

@@ -43,7 +43,7 @@
 - `target`: what it was done to, e.g. `"user:15"`, `"election:2"` (optional)
 - `details`: small dict of extra facts, e.g. `{"ip": "1.2.3.4"}` (optional, max 2000 chars)
 - Never put passwords, tokens, MFA codes or anything about how someone voted in `details`; keys containing words like `password`, `token`, `totp`, `ballot` or `preference` are refused with ValueError
-- For `vote.cast`, log only that the voter voted (e.g. `actor="user:12"`), never the ballot
+- For `vote.cast`, use `actor="system"` and `target="election:<id>"` with no voter id; the order of entries could otherwise link a voter to their ledger position (R11)
 - Bad input raises ValueError, so a mistake shows up in your tests
 - `verify_audit_log()` checks the whole chain and returns `ok`, `failed_sequence`, `reason`, `head_hash`
 
@@ -55,6 +55,25 @@
 - Once locked, any ORM change to the election, its divisions, groups, candidates or signatures raises `ElectionError`
 - Editing a definition after the first signature removes that signature; both admins must sign the new version
 - Statuses: `draft` → `awaiting_second_signature` → `locked`
+
+## Ballot ledger (R17, S5)
+- Import: `from app.ledger import append_ballot, LedgerError`
+- **S3:** after validating and encrypting a ballot, call `code = append_ballot(election, division, ciphertext)`; `ciphertext` is your encrypted ballot as a string (max 20000 chars)
+- Show `code` to the voter once on the confirmation page; it is not stored anywhere (only its SHA-256 is)
+- Refuses ballots unless `verify_election(election)` is ok
+- The ledger has no voter id and no timestamp; keep it that way, and don't store the ledger id against the voter
+- `verify_ledger(election_id)` returns `ok`, `failed_sequence`, `reason`, `head_hash`; R20 signs `head_hash` with the results
+- Voters check their code at `/results/track`
+
+## Signed results (R20, S5)
+- Import: `from app.results.publication import publish_results, verify_publication, ResultsError`
+- `publish_results(election, admin, tallies)`: admin only, once per election; `tallies` is `{division_id: {candidate_id: votes}}` covering every division and candidate
+- **S3:** after decrypting and counting, pass your counts here; it refuses if the definition (R19) or ledger (R17) fails verification, or a division has more votes than ballots
+- The signed document includes the definition hash and the ledger head hash, so results are tied to exactly those ballots
+- API: `GET /results/api/<election_id>` returns `document` (the exact signed string), `signature`, `algorithm`, `key_id`
+- Public key: `GET /results/api/public-key`
+- Pages: `/results/` (list) and `/results/<election_id>` (tables plus live verification)
+- **S4:** please include `/results/api/...` in rate limiting (R16)
 
 ## Testing
 - Fixtures in tests/conftest.py: app, client
