@@ -35,6 +35,18 @@
 
 *write one line: add your routes to your own blueprint only*
 
+## Audit log (R18, S5)
+- Import: `from app.audit import log_event`
+- Call: `log_event(actor, action, target=None, details=None)` after your change is saved; it commits the session
+- `actor`: who did it, e.g. `"user:12"`, `"admin:3"`, `"system"`
+- `action`: lower-case dotted name, `module.event`, e.g. `"auth.login_failed"`, `"auth.account_locked"`, `"admin.role_changed"`, `"election.signed"`, `"vote.cast"`
+- `target`: what it was done to, e.g. `"user:15"`, `"election:2"` (optional)
+- `details`: small dict of extra facts, e.g. `{"ip": "1.2.3.4"}` (optional, max 2000 chars)
+- Never put passwords, tokens, MFA codes or anything about how someone voted in `details`; keys containing words like `password`, `token`, `totp`, `ballot` or `preference` are refused with ValueError
+- For `vote.cast`, log only that the voter voted (e.g. `actor="user:12"`), never the ballot
+- Bad input raises ValueError, so a mistake shows up in your tests
+- `verify_audit_log()` checks the whole chain and returns `ok`, `failed_sequence`, `reason`, `head_hash`
+
 ## Testing
 - Fixtures in tests/conftest.py: app, client
 - *write one line: database queries in tests need `with app.app_context():`*

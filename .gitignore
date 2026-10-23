@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 .DS_Store
 .pytest_cache/
+# Audit signing key (R18)
+instance/

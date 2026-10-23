@@ -17,6 +17,10 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     csrf.init_app(app)
 
+    # Audit log signing key (R18)
+    from app.audit import init_audit
+    init_audit(app)
+
     # Blueprints
     from app.auth.routes import bp as auth_bp
     from app.enrolment.routes import bp as enrolment_bp
@@ -33,6 +37,7 @@ def create_app(config_class=Config):
     # Create tables for local development
     with app.app_context():
         from app import models  # noqa: F401  (registers the models)
+        from app.audit import models as audit_models  # noqa: F401
         db.create_all()
 
     return app
