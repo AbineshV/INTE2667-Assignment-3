@@ -24,7 +24,7 @@ def require_delegate():
 
 
 @bp.get("/actions")
-@login_required
+@require_roles("delegate")
 def list_actions():
     require_delegate()
 
@@ -54,7 +54,7 @@ def list_actions():
 
 
 @bp.post("/actions")
-@login_required
+@require_roles("delegate")
 def create_action():
     require_delegate()
 
@@ -82,7 +82,7 @@ def create_action():
 
 
 @bp.post("/actions/<int:action_id>/approve")
-@login_required
+@require_roles("delegate")
 def approve_pending_action(action_id):
     require_delegate()
 
