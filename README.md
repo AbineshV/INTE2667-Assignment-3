@@ -7,7 +7,11 @@ INTE2667 Assignment 3
 |---|---|---|
 | Abinesh V | s4221033 | AbineshV |
 | Hariharan Govindasamy Venkatraman | s4205841 | hariharan2k03 |
+<<<<<<< HEAD
 | Roshan Daniel Raj| S4220866 | roshandanraj |
+=======
+| Roshan Daniel Raj| s4220866 | roshandanraj |
+>>>>>>> origin/main
 | Aravind Gurumurthy Kanagambal | s4175149 | aravind-P-tester |
 | Venkatesh | <ID> | <username> |
 
