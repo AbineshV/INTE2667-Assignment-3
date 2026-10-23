@@ -2,14 +2,13 @@ import json
 
 from flask import Blueprint, abort, current_app, jsonify, render_template, request
 
+from app.access.permissions import public_endpoint
 from app.extensions import db
 from app.ledger import lookup_tracking_code
 from app.results.models import ResultPublication
 from app.results.publication import (
     ALGORITHM, key_id, results_public_key_pem, verify_publication,
 )
-
-from app.access.permissions import require_roles
 
 bp = Blueprint("results", __name__, url_prefix="/results")
 
@@ -23,8 +22,9 @@ def _publication_or_404(election_id):
     return publication
 
 
+# Published results are signed and meant to be checked by anyone (R20)
 @bp.route("/")
-@require_roles("admin")
+@public_endpoint
 def index():
     publications = db.session.execute(
         db.select(ResultPublication).order_by(ResultPublication.id.desc())
@@ -34,6 +34,7 @@ def index():
 
 
 @bp.route("/<int:election_id>")
+@public_endpoint
 def detail(election_id):
     publication = _publication_or_404(election_id)
     return render_template("results/detail.html", publication=publication,
@@ -42,6 +43,7 @@ def detail(election_id):
 
 
 @bp.route("/api/<int:election_id>")
+@public_endpoint
 def api_results(election_id):
     publication = _publication_or_404(election_id)
     # "document" is the exact signed string; verify it as-is, then parse it
@@ -54,6 +56,7 @@ def api_results(election_id):
 
 
 @bp.route("/api/public-key")
+@public_endpoint
 def api_public_key():
     return jsonify({
         "algorithm": ALGORITHM,
@@ -64,6 +67,7 @@ def api_public_key():
 
 # POST so the tracking code never appears in URLs or server logs
 @bp.route("/track", methods=["GET", "POST"])
+@public_endpoint
 def track():
     result = None
     searched = False
