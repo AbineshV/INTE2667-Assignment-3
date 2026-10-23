@@ -1,7 +1,8 @@
 from app.access.permissions import public_endpoint, require_roles
 from datetime import date
-
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, flash, redirect, render_template, request, url_for, session
+)
 from flask_login import login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 
@@ -51,17 +52,19 @@ def login():
         user.password_hash = hash_password(password)
     db.session.commit()
 
-    login_user(user)
+    # Discard pre-login session state before establishing authentication.
+    session.clear()
+    login_user(user, fresh=True)
+    session.permanent = True
     flash("Logged in.", "success")
     return redirect(url_for("voting.index"))
-
 @bp.route("/logout", methods=["POST"])
 @require_roles("voter", "officer", "delegate", "admin")
 def logout():
     logout_user()
+    session.clear()
     flash("Logged out.", "success")
     return redirect(url_for("auth.login"))
-
 @bp.route("/register", methods=["GET", "POST"])
 @public_endpoint
 def register():
