@@ -79,6 +79,7 @@ class Candidate(db.Model):
     name = db.Column(db.String(200), nullable=False)
     party = db.Column(db.String(200), nullable=True)
     position = db.Column(db.Integer, nullable=False)
+    is_excluded = db.Column(db.Boolean, nullable=False, default=False)
 
     division = db.relationship("Division", back_populates="candidates")
     group = db.relationship("Group", back_populates="candidates")
