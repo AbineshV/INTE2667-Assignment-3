@@ -15,13 +15,17 @@ from app.extensions import db
 from app.models import User
 from app.auth.lockout import is_locked, record_failed_login, reset_failed_logins, utc_now
 
-import pyotp 
 
+import pyotp 
+from cryptography.fernet import InvalidToken
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 # Hash of a random value, used so unknown emails take as long as wrong passwords
 _DUMMY_HASH = hash_password("dummy-password-for-timing-only")
+
+
+MFA_TIMEOUT_SECONDS = 300  # 5 minutes to enter the code
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -51,14 +55,22 @@ def login():
         flash("Invalid email or password.", "error")
         return render_template("auth/login.html"), 401
 
-    reset_failed_logins(user)
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
-    db.session.commit()
 
+    if user.totp_secret:
+        # Password correct, but not logged in until the code is checked.
+        # Failed count is NOT reset here, so MFA guesses still lead to lockout.
+        db.session.commit()
+        session["mfa_user_id"] = user.id
+        session["mfa_started"] = int(now.timestamp())
+        return redirect(url_for("auth.mfa_verify"))
+
+    reset_failed_logins(user)
+    db.session.commit()
     login_user(user)
-    flash("Logged in.", "success")
-    return redirect(url_for("voting.index"))
+    flash("Logged in. Please set up two-factor authentication.", "success")
+    return redirect(url_for("auth.mfa_setup"))
 
 @bp.route("/logout", methods=["POST"])
 def logout():
@@ -103,6 +115,63 @@ def mfa_setup():
     session.pop("pending_totp_secret", None)
 
     flash("Two-factor authentication enabled.", "success")
+    return redirect(url_for("voting.index"))
+
+
+def _clear_mfa_session():
+    session.pop("mfa_user_id", None)
+    session.pop("mfa_started", None)
+
+
+def _restart_login():
+    _clear_mfa_session()
+    flash("Please log in again.", "error")
+    return redirect(url_for("auth.login"))
+
+
+@bp.route("/mfa/verify", methods=["GET", "POST"])
+def mfa_verify():
+    user_id = session.get("mfa_user_id")
+    started = session.get("mfa_started")
+    now = utc_now()
+
+    if user_id is None or started is None:
+        return _restart_login()
+    if int(now.timestamp()) - started > MFA_TIMEOUT_SECONDS:
+        return _restart_login()
+
+    user = db.session.get(User, user_id)
+    if user is None:
+        return _restart_login()
+
+    if is_locked(user, now):
+        # TODO: audit log via S5's logger
+        flash("Invalid email or password.", "error")
+        return render_template("auth/mfa_verify.html"), 401
+
+    if request.method == "GET":
+        return render_template("auth/mfa_verify.html")
+
+    try:
+        secret = decrypt_secret(user.totp_secret)
+        step = check_code(secret, request.form.get("code", ""), now, user.totp_last_used_step)
+    except InvalidToken:
+        # TODO: audit log via S5's logger (stored secret could not be decrypted)
+        step = None
+
+    if step is None:
+        record_failed_login(user, now)
+        db.session.commit()
+        flash("Invalid code.", "error")
+        return render_template("auth/mfa_verify.html"), 401
+
+    user.totp_last_used_step = step
+    reset_failed_logins(user)
+    db.session.commit()
+    _clear_mfa_session()
+
+    login_user(user)
+    flash("Logged in.", "success")
     return redirect(url_for("voting.index"))
 
 @bp.route("/register", methods=["GET", "POST"])
