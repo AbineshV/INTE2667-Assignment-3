@@ -20,6 +20,11 @@ NO_DIVISION = "NO_DIVISION"
 
 
 def calculate_age(dob, today):
+    """Return the age in whole years on `today` for someone born on `dob`.
+
+    The age goes up on the birthday itself. Someone born on 29 February
+    turns a year older on 1 March in non-leap years.
+    """
     age = today.year - dob.year
     if (today.month, today.day) < (dob.month, dob.day):
         age -= 1
@@ -27,6 +32,25 @@ def calculate_age(dob, today):
 
 
 def check_eligibility(user, today=None):
+    """Check whether `user` may vote.
+
+    Returns (True, None) if eligible, or (False, reason_code) at the first
+    failed check, where reason_code is one of the constants above.
+
+    Checks run in this fixed order, so the first failure decides the reason:
+      1. user exists               -> NO_USER
+      2. is_enrolled is True       -> NOT_ENROLLED
+      3. is_citizen is True        -> NOT_CITIZEN
+      4. date_of_birth is recorded -> NO_DOB
+      5. age is at least 18        -> UNDER_AGE
+      6. division is not blank     -> NO_DIVISION
+
+    The booleans must be exactly True; None or any other value fails closed.
+
+    `today` can be passed in for testing. If omitted, the server's local
+    date is used. Assumption: dates are server-local in this prototype; a
+    production system would use the official polling-day date.
+    """
     if today is None:
         today = date.today()
 
