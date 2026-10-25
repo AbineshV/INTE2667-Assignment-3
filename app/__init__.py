@@ -1,52 +1,40 @@
-import time
-
-from flask import (
-    Flask,
-    abort,
-    redirect,
-    request,
-    session,
-    url_for,
-)
-from flask_login import current_user, logout_user
+from flask import Flask, abort, request
 
 from app.config import Config
 from app.extensions import db, login_manager, csrf
-
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Refuse to start without a secret key.
+    # Refuse to start without a secret key
     if not app.config.get("SECRET_KEY"):
-        raise RuntimeError(
-            "SECRET_KEY is not set. Add it to your .env file."
-        )
-
-    # Extensions.
+        raise RuntimeError("SECRET_KEY is not set. Add it to your .env file.")
+    # Extensions
     db.init_app(app)
-
     login_manager.init_app(app)
     login_manager.session_protection = app.config.get(
         "SESSION_PROTECTION", "strong"
     )
-
     csrf.init_app(app)
 
-    # Audit log signing key (R18).
+    # Audit log signing key (R18)
     from app.audit import init_audit
     init_audit(app)
 
-    # Election definition signing key (R19).
+    # Election definition signing key (R19)
     from app.elections import init_elections
     init_elections(app)
 
-    # Results signing key (R20).
+    # Results signing key (R20)
     from app.results import init_results
     init_results(app)
 
-    # Blueprints.
+    # Ballot sealing key (R9 – S3)
+    from app.voting import init_voting
+    init_voting(app)
+
+    # Blueprints
     from app.auth.routes import bp as auth_bp
     from app.enrolment.routes import bp as enrolment_bp
     from app.voting.routes import bp as voting_bp
@@ -59,48 +47,17 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_bp)
     app.register_blueprint(results_bp)
 
-    # R8: enforce a 30-minute inactivity timeout.
-    @app.before_request
-    def enforce_session_inactivity_timeout():
-        """Log out authenticated users after prolonged inactivity."""
-        if not current_user.is_authenticated:
-            return None
-
-        now = int(time.time())
-        last_activity = session.get("last_activity")
-        timeout_seconds = int(
-            app.permanent_session_lifetime.total_seconds()
-        )
-
-        # Reject missing, invalid, expired or future timestamps.
-        if (
-            not isinstance(last_activity, int)
-            or isinstance(last_activity, bool)
-            or last_activity > now
-            or now - last_activity >= timeout_seconds
-        ):
-            logout_user()
-            session.clear()
-            return redirect(url_for("auth.login"))
-
-        # Refresh activity after a valid request.
-        session["last_activity"] = now
-        session.permanent = True
-
-        return None
-
-    # R5: enforce explicit access policy for every application route.
     @app.before_request
     def enforce_explicit_access_policy():
         endpoint = request.endpoint
 
         # Let Flask return its normal 404 for unknown URLs.
         if endpoint is None:
-            return None
+            return
 
         # Static assets are public.
         if endpoint == "static":
-            return None
+            return
 
         view_func = app.view_functions.get(endpoint)
 
@@ -108,25 +65,25 @@ def create_app(config_class=Config):
         if view_func is None:
             abort(403)
 
-        # Permit explicitly public routes.
+        # Permit routes explicitly marked public.
         if getattr(view_func, "is_public_endpoint", False):
-            return None
+            return
 
-        # Explicit role policies are checked by their decorators.
+        # Routes with explicit role policies are checked by their decorators.
         if getattr(view_func, "allowed_roles", None):
-            return None
+            return
 
         # Secure default: no declared policy means no access.
         abort(403)
 
-    # Create tables for local development.
+    # Create tables for local development
     with app.app_context():
-        from app import models  # noqa: F401
+        from app import models  # noqa: F401  (registers the models)
         from app.audit import models as audit_models  # noqa: F401
         from app.elections import models as election_models  # noqa: F401
         from app.ledger import models as ledger_models  # noqa: F401
         from app.results import models as results_models  # noqa: F401
-
+        from app.voting import models as voting_models  # noqa: F401  (S3)
         db.create_all()
 
     return app

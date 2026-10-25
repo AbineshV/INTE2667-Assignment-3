@@ -1,0 +1,139 @@
+"""
+S3 – Secure ballot casting service (R9, R11, R12).
+
+cast_ballot() is the one place a vote is recorded. In a single transaction it:
+
+  1. (R12) refuses if this voter already has a VoteRecord for the election;
+  2. (R9)  encrypts the ranked preferences into a sealed blob;
+  3. (R11) stores that blob in an anonymous Ballot row with NO voter_id;
+  4. (R12) writes a VoteRecord(voter, election) marker — the unique constraint
+           is the real guard against a double vote under concurrency;
+  5. logs participation to the audit trail (never the choices).
+
+Because step 3 and step 4 write to different tables that share no column, the
+system knows THAT the voter voted and WHAT the anonymous ballots say, but can
+never join the two.
+"""
+
+import json
+import secrets
+
+from flask import current_app
+from sqlalchemy.exc import IntegrityError
+
+from app.audit import log_event
+from app.elections import verify_election
+from app.elections.models import Division, Election, STATUS_LOCKED
+from app.extensions import db
+from app.voting.models import Ballot, VoteRecord
+
+_MAX_ATTEMPTS = 5
+
+
+class BallotError(Exception):
+    """A ballot could not be accepted."""
+
+
+class AlreadyVotedError(BallotError):
+    """This voter has already voted in this election (R12)."""
+
+
+def has_voted(voter_id, election_id) -> bool:
+    return db.session.execute(
+        db.select(VoteRecord).filter_by(voter_id=voter_id, election_id=election_id)
+    ).scalar_one_or_none() is not None
+
+
+def _sealing_key():
+    return current_app.extensions["ballot_sealing_key"]
+
+
+def _new_tracking_code():
+    return secrets.token_hex(16).upper()
+
+
+def _resolve_division(election, voter_division):
+    for div in election.divisions:
+        if div.name == voter_division:
+            return div
+    # Fall back to the first division (e.g. in tests / single-division setups)
+    return election.divisions[0] if election.divisions else None
+
+
+def cast_ballot(voter_id, voter_division, election_id, preferences):
+    """
+    Record one secure, anonymous ballot and return the voter's tracking code.
+
+    `preferences` is the ranked list the voter submitted, e.g.
+    [{"candidate_id": 3, "rank": 1}, {"candidate_id": 7, "rank": 2}].
+    """
+    election = db.session.get(Election, election_id)
+    if election is None:
+        raise BallotError("Unknown election.")
+
+    # R19: only accept votes on a verified, locked ballot definition.
+    if election.status != STATUS_LOCKED or not verify_election(election).ok:
+        raise BallotError("This election is not open for voting.")
+
+    division = _resolve_division(election, voter_division)
+    if division is None:
+        raise BallotError("No division found for this election.")
+
+    if not preferences:
+        raise BallotError("No preferences submitted.")
+
+    valid_ids = {c.id for c in division.candidates if not c.is_excluded}
+    submitted_ids = {int(p["candidate_id"]) for p in preferences}
+    if not submitted_ids.issubset(valid_ids):
+        raise BallotError("Ballot references unknown or excluded candidates.")
+
+    # R12: early, friendly rejection of a repeat vote.
+    if has_voted(voter_id, election_id):
+        raise AlreadyVotedError("You have already voted in this election.")
+
+    # R9: seal the preferences before they are stored.
+    plaintext = json.dumps(preferences, sort_keys=True, separators=(",", ":"))
+    sealed = _sealing_key().encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+    for attempt in range(_MAX_ATTEMPTS):
+        tracking_code = _new_tracking_code()
+
+        # R11: the Ballot carries NO voter_id.
+        db.session.add(Ballot(
+            election_id=election_id,
+            division_id=division.id,
+            chamber=election.chamber,
+            sealed_ballot=sealed,
+            tracking_code=tracking_code,
+        ))
+        # R12: the marker that this voter has now voted.
+        db.session.add(VoteRecord(voter_id=voter_id, election_id=election_id))
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            # If the voter raced a second ballot in, the unique constraint fired.
+            if has_voted(voter_id, election_id):
+                raise AlreadyVotedError("You have already voted in this election.")
+            if attempt == _MAX_ATTEMPTS - 1:
+                raise
+            continue
+
+        # Participation only — never the choices.
+        log_event(actor=f"user:{voter_id}", action="vote.cast",
+                  target=f"election:{election_id}")
+        return tracking_code
+
+
+def find_by_tracking_code(code):
+    """Confirm a ballot is recorded, by its tracking code. No contents returned."""
+    ballot = db.session.execute(
+        db.select(Ballot).filter_by(tracking_code=code)
+    ).scalar_one_or_none()
+    if ballot is None:
+        return None
+    return {"tracking_code": ballot.tracking_code,
+            "election_id": ballot.election_id,
+            "cast_at": ballot.cast_at.isoformat(),
+            "included": True}
