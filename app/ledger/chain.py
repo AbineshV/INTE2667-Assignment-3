@@ -75,8 +75,13 @@ def _last_entry(election_id):
     ).scalar_one_or_none()
 
 
-def append_ballot(election, division, ciphertext):
-    # Returns the tracking code; show it to the voter once, it is not stored
+def hash_tracking_code(code):
+    normalised = normalise_tracking_code(code)
+    return _sha256(normalised) if normalised else None
+
+
+def stage_ballot(election, division, ciphertext):
+    # Adds the entry without committing so callers can save it with their own rows
     if not verify_election(election).ok:
         raise LedgerError("Ballots can only be recorded for a locked and verified election.")
     if division is None or division.election_id != election.id:
@@ -87,25 +92,30 @@ def append_ballot(election, division, ciphertext):
         raise LedgerError("Ciphertext is too large.")
 
     ciphertext_hash = _sha256(ciphertext)
+    code = new_tracking_code()
+    tracking_hash = _sha256(code)
+    last = _last_entry(election.id)
+    sequence = last.sequence + 1 if last else 1
+    prev_hash = last.entry_hash if last else GENESIS_HASH
 
+    db.session.add(BallotLedgerEntry(
+        election_id=election.id,
+        division_id=division.id,
+        sequence=sequence,
+        ciphertext=ciphertext,
+        ciphertext_hash=ciphertext_hash,
+        tracking_hash=tracking_hash,
+        prev_hash=prev_hash,
+        entry_hash=compute_entry_hash(election.id, sequence, ciphertext_hash,
+                                      tracking_hash, prev_hash),
+    ))
+    return code
+
+
+def append_ballot(election, division, ciphertext):
+    # Returns the tracking code; show it to the voter once, it is not stored
     for attempt in range(_MAX_APPEND_ATTEMPTS):
-        code = new_tracking_code()
-        tracking_hash = _sha256(code)
-        last = _last_entry(election.id)
-        sequence = last.sequence + 1 if last else 1
-        prev_hash = last.entry_hash if last else GENESIS_HASH
-
-        db.session.add(BallotLedgerEntry(
-            election_id=election.id,
-            division_id=division.id,
-            sequence=sequence,
-            ciphertext=ciphertext,
-            ciphertext_hash=ciphertext_hash,
-            tracking_hash=tracking_hash,
-            prev_hash=prev_hash,
-            entry_hash=compute_entry_hash(election.id, sequence, ciphertext_hash,
-                                          tracking_hash, prev_hash),
-        ))
+        code = stage_ballot(election, division, ciphertext)
         try:
             db.session.commit()
             return code

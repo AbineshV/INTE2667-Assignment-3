@@ -26,6 +26,8 @@ from app.audit import log_event
 from app.elections import verify_election
 from app.elections.models import Division, Election, STATUS_LOCKED
 from app.extensions import db
+from app.ledger import LedgerError, hash_tracking_code, stage_ballot
+from app.ledger.chain import normalise_tracking_code
 from app.voting.models import Ballot, VoteRecord
 
 _MAX_ATTEMPTS = 5
@@ -84,10 +86,6 @@ def _sealing_key():
     return current_app.extensions["ballot_sealing_key"]
 
 
-def _new_tracking_code():
-    return secrets.token_hex(16).upper()
-
-
 def _resolve_division(election, voter_division):
     for div in election.divisions:
         if div.name == voter_division:
@@ -131,7 +129,12 @@ def cast_ballot(voter_id, voter_division, election_id, preferences):
     sealed = _sealing_key().encrypt(plaintext.encode("utf-8")).decode("ascii")
 
     for attempt in range(_MAX_ATTEMPTS):
-        tracking_code = _new_tracking_code()
+        # R17: same transaction as the ballot; the ledger code is the receipt
+        try:
+            tracking_code = stage_ballot(election, division, sealed)
+        except LedgerError as exc:
+            db.session.rollback()
+            raise BallotError(str(exc))
 
         # R11: the Ballot carries NO voter_id, a RANDOM (non-sequential) id so
         # its order can't be matched to a VoteRecord, and only the cast date.
@@ -141,7 +144,7 @@ def cast_ballot(voter_id, voter_division, election_id, preferences):
             division_id=division.id,
             chamber=election.chamber,
             sealed_ballot=sealed,
-            tracking_code=tracking_code,
+            tracking_code=hash_tracking_code(tracking_code),
             cast_date=date.today(),
         ))
         # R12: the marker that this voter has now voted.
@@ -166,12 +169,15 @@ def cast_ballot(voter_id, voter_division, election_id, preferences):
 
 def find_by_tracking_code(code):
     """Confirm a ballot is recorded, by its tracking code. No contents returned."""
+    code_hash = hash_tracking_code(code)
+    if code_hash is None:
+        return None
     ballot = db.session.execute(
-        db.select(Ballot).filter_by(tracking_code=code)
+        db.select(Ballot).filter_by(tracking_code=code_hash)
     ).scalar_one_or_none()
     if ballot is None:
         return None
-    return {"tracking_code": ballot.tracking_code,
+    return {"tracking_code": normalise_tracking_code(code),
             "election_id": ballot.election_id,
             "cast_date": ballot.cast_date.isoformat(),
             "included": True}
