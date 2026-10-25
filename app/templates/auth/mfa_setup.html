@@ -6,7 +6,9 @@
   <h1>Set up two-factor authentication</h1>
 
   <p>Scan this QR code with an authenticator app such as Google Authenticator or Microsoft Authenticator.</p>
-  <img src="{{ qr }}" alt="QR code for authenticator app">
+  <div class="qr-tile">
+    <img src="{{ qr }}" alt="QR code for authenticator app">
+  </div>
 
   <p>Can't scan it? Enter this key in your app instead:</p>
   <p><code>{{ secret }}</code></p>

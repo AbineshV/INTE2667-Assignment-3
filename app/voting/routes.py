@@ -5,7 +5,7 @@ Thin HTTP layer over app/voting/casting.py. The security properties (R9, R11,
 R12) live in the service; these handlers validate input and shape responses.
 """
 
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, abort, jsonify, render_template, request
 from flask_login import current_user
 
 from app.access.permissions import public_endpoint, require_roles
@@ -51,6 +51,10 @@ def index():
             "chamber": election.chamber,
             "has_voted": has_voted(current_user.id, election.id),
         })
+
+    # Browsers get the page with the site layout; API clients keep the JSON
+    if request.accept_mimetypes.best_match(["application/json", "text/html"]) == "text/html":
+        return render_template("voting/index.html", elections=result)
     return jsonify({"elections": result})
 
 
