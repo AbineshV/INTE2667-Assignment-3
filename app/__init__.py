@@ -46,6 +46,10 @@ def create_app(config_class=Config):
     from app.results import init_results
     init_results(app)
 
+    # Ballot sealing key (R9 – S3).
+    from app.voting import init_voting
+    init_voting(app)
+
     # Blueprints.
     from app.auth.routes import bp as auth_bp
     from app.enrolment.routes import bp as enrolment_bp
@@ -126,6 +130,7 @@ def create_app(config_class=Config):
         from app.elections import models as election_models  # noqa: F401
         from app.ledger import models as ledger_models  # noqa: F401
         from app.results import models as results_models  # noqa: F401
+        from app.voting import models as voting_models  # noqa: F401
 
         db.create_all()
 
