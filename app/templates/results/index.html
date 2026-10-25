@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Results | Electronic Voting Platform{% endblock %}
+
+{% block main %}
+  <div class="card card-wide">
+    <h1>Election results</h1>
+    <p class="lead">Every result is digitally signed. Anyone can check it with the published key.</p>
+
+    {% if rows %}
+      <table>
+        <thead>
+          <tr><th>Election</th><th>Chamber</th><th>Ballots</th><th>Published</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for publication, data in rows %}
+            <tr>
+              <td>{{ data.election.name }}</td>
+              <td>{{ data.election.chamber | capitalize }}</td>
+              <td>{{ data.ledger.ballots }}</td>
+              <td>{{ data.published_at[:10] }}</td>
+              <td><a href="{{ url_for('results.detail', election_id=publication.election_id) }}">View</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert"><p>No results have been published yet.</p></div>
+    {% endif %}
+
+    <p class="hint api-links">
+      API: <code>/results/api/&lt;election_id&gt;</code> · Public key:
+      <a href="{{ url_for('results.api_public_key') }}">/results/api/public-key</a>
+    </p>
+  </div>
+{% endblock %}
