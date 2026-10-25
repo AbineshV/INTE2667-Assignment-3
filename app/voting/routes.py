@@ -9,6 +9,7 @@ from flask import Blueprint, abort, jsonify, request
 from flask_login import current_user
 
 from app.access.permissions import public_endpoint, require_roles
+from app.auth.eligibility import check_and_log_eligibility
 from app.elections import verify_election
 from app.elections.models import STATUS_LOCKED, Election
 from app.extensions import db
@@ -96,6 +97,12 @@ def cast(election_id):
     Body (JSON): {"preferences": [{"candidate_id": 3, "rank": 1}, ...]}
     Returns 201 + tracking_code, 409 if already voted / not open, 400 on bad input.
     """
+    # R2: confirm the voter is eligible (enrolled citizen, 18+, has a division)
+    # before accepting a ballot. Any refusal is written to the audit log.
+    eligible, reason = check_and_log_eligibility(current_user)
+    if not eligible:
+        return jsonify({"error": "Not eligible to vote.", "reason": reason}), 403
+
     body = request.get_json(silent=True) or {}
     preferences = body.get("preferences", [])
     try:
