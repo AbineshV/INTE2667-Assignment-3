@@ -1,6 +1,8 @@
+from app.access.permissions import public_endpoint, require_roles
 from datetime import date
-
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, flash, redirect, render_template, request, url_for, session
+)
 from flask_login import login_user, logout_user
 from sqlalchemy.exc import IntegrityError
 from flask import (Blueprint, flash, make_response, redirect, render_template,
@@ -29,6 +31,7 @@ MFA_TIMEOUT_SECONDS = 300  # 5 minutes to enter the code
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@public_endpoint
 def login():
     if request.method == "GET":
         return render_template("auth/login.html")
@@ -62,21 +65,27 @@ def login():
         # Password correct, but not logged in until the code is checked.
         # Failed count is NOT reset here, so MFA guesses still lead to lockout.
         db.session.commit()
+        session.clear()  # R8: discard pre-login session state
         session["mfa_user_id"] = user.id
         session["mfa_started"] = int(now.timestamp())
         return redirect(url_for("auth.mfa_verify"))
 
     reset_failed_logins(user)
     db.session.commit()
-    login_user(user)
+    session.clear()  # R8: discard pre-login session state
+    login_user(user, fresh=True)
+    session.permanent = True
     flash("Logged in. Please set up two-factor authentication.", "success")
     return redirect(url_for("auth.mfa_setup"))
 
 @bp.route("/logout", methods=["POST"])
+@require_roles("voter", "officer", "delegate", "admin")
 def logout():
     logout_user()
+    session.clear()
     flash("Logged out.", "success")
     return redirect(url_for("auth.login"))
+
 
 def _render_mfa_setup(secret, status=200):
     uri = pyotp.TOTP(secret).provisioning_uri(
@@ -91,7 +100,7 @@ def _render_mfa_setup(secret, status=200):
 
 
 @bp.route("/mfa/setup", methods=["GET", "POST"])
-@login_required
+@require_roles("voter", "officer", "delegate", "admin")
 def mfa_setup():
     if current_user.totp_secret:
         flash("Two-factor authentication is already enabled.", "info")
@@ -130,6 +139,7 @@ def _restart_login():
 
 
 @bp.route("/mfa/verify", methods=["GET", "POST"])
+@public_endpoint
 def mfa_verify():
     user_id = session.get("mfa_user_id")
     started = session.get("mfa_started")
@@ -142,6 +152,9 @@ def mfa_verify():
 
     user = db.session.get(User, user_id)
     if user is None:
+        return _restart_login()
+
+    if not user.totp_secret:
         return _restart_login()
 
     if is_locked(user, now):
@@ -168,13 +181,15 @@ def mfa_verify():
     user.totp_last_used_step = step
     reset_failed_logins(user)
     db.session.commit()
-    _clear_mfa_session()
-
-    login_user(user)
+    session.clear()  # R8: also removes the MFA keys
+    login_user(user, fresh=True)
+    session.permanent = True
     flash("Logged in.", "success")
     return redirect(url_for("voting.index"))
 
+
 @bp.route("/register", methods=["GET", "POST"])
+@public_endpoint
 def register():
     if request.method == "GET":
         return render_template("auth/register.html")
