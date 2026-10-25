@@ -29,10 +29,17 @@ class Ballot(db.Model):
     One cast ballot. ANONYMOUS by design — there is deliberately no voter_id
     column here (R11). The ranked preferences are encrypted into
     `sealed_ballot` (R9); the plaintext choices are never stored.
+
+    R11 hardening — two correlations that could otherwise re-link a ballot to a
+    voter are removed:
+      * the id is a RANDOM big integer (assigned in casting.py, autoincrement
+        off), so the n-th ballot's id does not line up with the n-th VoteRecord;
+      * only the cast DATE is stored, never a precise time, so a ballot cannot
+        be matched to a VoteRecord by a shared timestamp.
     """
     __tablename__ = "ballots"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     election_id = db.Column(db.Integer, db.ForeignKey("elections.id"),
                             nullable=False, index=True)
     division_id = db.Column(db.Integer, db.ForeignKey("divisions.id"),
@@ -46,8 +53,8 @@ class Ballot(db.Model):
     tracking_code = db.Column(db.String(64), unique=True, nullable=False,
                               index=True)
 
-    cast_at = db.Column(db.DateTime(timezone=True),
-                        default=_utc_now, nullable=False)
+    # R11: DATE only (no time-of-day), so it can't be matched to a VoteRecord.
+    cast_date = db.Column(db.Date, nullable=False)
 
     election = db.relationship("Election")
     division = db.relationship("Division")
