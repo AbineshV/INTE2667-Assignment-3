@@ -37,6 +37,10 @@ def create_app(config_class=Config):
     # R16: rate limiting.
     limiter.init_app(app)
 
+    # R16: security headers on every response
+    from app.security.headers import init_security_headers
+    init_security_headers(app)
+
     # Audit log signing key (R18).
     from app.audit import init_audit
     init_audit(app)
