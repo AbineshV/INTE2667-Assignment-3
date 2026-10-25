@@ -436,3 +436,43 @@ def test_delegate_cannot_move_user_to_another_division(app):
 
         db.session.refresh(target)
         assert target.division == "D01"
+
+def test_target_moved_to_another_division_before_approval_is_rejected(app):
+    with app.app_context():
+        requester = make_user(
+            "stale-requester@example.com",
+            division="D01",
+        )
+        approver = make_user(
+            "stale-approver@example.com",
+            division="D01",
+        )
+        target = make_user(
+            "stale-target@example.com",
+            role="voter",
+            division="D01",
+        )
+
+        action = request_action(
+            requester,
+            "bulk_enrolment_change",
+            {"changes": [{"user_id": target.id, "is_enrolled": False}]},
+        )
+
+        action_id = action.id
+        target_id = target.id
+
+        # Simulate reassignment after the request was created.
+        target.division = "D02"
+        db.session.commit()
+
+        with pytest.raises(PermissionError, match="assigned division"):
+            approve_action(action_id, approver)
+
+        db.session.refresh(action)
+        db.session.refresh(target)
+
+        assert action.status == "pending"
+        assert action.executed_at is None
+        assert target.division == "D02"
+        assert target.is_enrolled is True

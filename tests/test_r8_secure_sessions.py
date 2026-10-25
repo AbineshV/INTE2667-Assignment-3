@@ -100,3 +100,18 @@ def test_authenticated_session_without_activity_timestamp_is_rejected(
 
     with client.session_transaction() as session:
         assert "_user_id" not in session
+
+def test_session_with_future_activity_timestamp_is_rejected(app, client):
+    _login_test_voter(app, client)
+
+    with client.session_transaction() as session:
+        session["last_activity"] = int(time.time()) + 3600
+
+    response = client.get("/vote/")
+
+    assert response.status_code == 302
+    assert "/auth/login" in response.headers["Location"]
+
+    with client.session_transaction() as session:
+        assert "_user_id" not in session
+        assert "last_activity" not in session
