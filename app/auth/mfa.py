@@ -50,7 +50,6 @@ def check_code(secret, code, now, last_used_step):
 
 def qr_data_uri(uri):
     buffer = io.BytesIO()
-    qrcode.make(uri).save(buffer)
     qrcode.make(uri, image_factory=SvgPathImage).save(buffer)
     encoded = base64.b64encode(buffer.getvalue()).decode()
     return "data:image/svg+xml;base64," + encoded
