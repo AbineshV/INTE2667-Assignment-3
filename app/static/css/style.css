@@ -16,6 +16,7 @@
   --header: #0f1b3d;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 16px rgba(16, 24, 40, .06);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,8 @@
     --danger: #ff7a6e;
     --danger-soft: #331715;
     --header: #080c17;
+    /* Native controls such as the date picker icon follow the dark theme */
+    color-scheme: dark;
   }
 }
 
@@ -226,6 +229,17 @@ tbody tr:hover { background: var(--primary-soft); }
 .facts .fingerprint { margin-top: 0; }
 
 .api-links { margin-top: 24px; }
+
+/* QR codes need dark modules on a light background to scan, in both themes */
+.qr-tile {
+  display: inline-block;
+  padding: 14px;
+  margin: 8px 0 16px;
+  background: #ffffff;
+  border-radius: 10px;
+}
+
+.qr-tile img { display: block; width: 200px; height: 200px; }
 
 /* Footer */
 .site-footer {
