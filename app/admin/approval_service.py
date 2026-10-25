@@ -187,8 +187,58 @@ def _check_targets(action_type, payload, actor):
                     "Delegates cannot move users outside "
                     "their assigned division."
                 )
+def action_is_visible_to_division(action, division):
+    """Return True only if all action targets belong to the given division."""
+    if not isinstance(division, str) or not division.strip():
+        return False
 
+    payload = action.payload
+    if not isinstance(payload, dict):
+        return False
 
+    if action.action_type == CANDIDATE_EXCLUSION:
+        candidate_id = payload.get("candidate_id")
+
+        if type(candidate_id) is not int:
+            return False
+
+        candidate = db.session.get(Candidate, candidate_id)
+
+        return (
+            candidate is not None
+            and candidate.division is not None
+            and candidate.division.name == division
+        )
+
+    if action.action_type == BULK_ENROLMENT_CHANGE:
+        changes = payload.get("changes")
+
+        if not isinstance(changes, list) or not changes:
+            return False
+
+        for change in changes:
+            if not isinstance(change, dict):
+                return False
+
+            user_id = change.get("user_id")
+
+            if type(user_id) is not int:
+                return False
+
+            user = db.session.get(User, user_id)
+
+            if user is None or user.division != division:
+                return False
+
+            if (
+                "division" in change
+                and change["division"] != division
+            ):
+                return False
+
+        return True
+
+    return False
 def request_action(actor, action_type, payload, now=None):
     """Create a pending action and record the request in the signed audit log."""
     _require_delegate(actor)

@@ -476,3 +476,58 @@ def test_target_moved_to_another_division_before_approval_is_rejected(app):
         assert action.executed_at is None
         assert target.division == "D02"
         assert target.is_enrolled is True
+
+def test_delegate_lists_only_actions_for_their_division(app, client):
+    with app.app_context():
+        requester_d01 = make_user(
+            "list-requester-d01@example.com",
+            division="D01",
+        )
+        target_d01 = make_user(
+            "list-target-d01@example.com",
+            role="voter",
+            division="D01",
+        )
+
+        requester_d02 = make_user(
+            "list-requester-d02@example.com",
+            division="D02",
+        )
+        target_d02 = make_user(
+            "list-target-d02@example.com",
+            role="voter",
+            division="D02",
+        )
+
+        action_d01 = request_action(
+            requester_d01,
+            "bulk_enrolment_change",
+            {
+                "changes": [
+                    {"user_id": target_d01.id, "is_enrolled": False}
+                ]
+            },
+        )
+
+        action_d02 = request_action(
+            requester_d02,
+            "bulk_enrolment_change",
+            {
+                "changes": [
+                    {"user_id": target_d02.id, "is_enrolled": False}
+                ]
+            },
+        )
+
+        action_d01_id = action_d01.id
+        action_d02_id = action_d02.id
+
+    _log_in_as(client, "list-requester-d01@example.com")
+
+    response = client.get("/admin/actions")
+
+    assert response.status_code == 200
+    visible_ids = {item["id"] for item in response.get_json()}
+
+    assert action_d01_id in visible_ids
+    assert action_d02_id not in visible_ids
