@@ -3,7 +3,7 @@ import json
 from flask import Blueprint, abort, current_app, jsonify, render_template, request
 
 from app.access.permissions import public_endpoint
-from app.extensions import db
+from app.extensions import db, limiter
 from app.ledger import lookup_tracking_code
 from app.results.models import ResultPublication
 from app.results.publication import (
@@ -44,6 +44,7 @@ def detail(election_id):
 
 @bp.route("/api/<int:election_id>")
 @public_endpoint
+@limiter.limit("60 per hour")
 def api_results(election_id):
     publication = _publication_or_404(election_id)
     # "document" is the exact signed string; verify it as-is, then parse it
@@ -57,6 +58,7 @@ def api_results(election_id):
 
 @bp.route("/api/public-key")
 @public_endpoint
+@limiter.limit("120 per hour")
 def api_public_key():
     return jsonify({
         "algorithm": ALGORITHM,
