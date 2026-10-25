@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app.auth.passwords import hash_password
 from app.audit.models import AuditLogEntry
 from app.elections.models import Candidate, Division, Election
 from app.extensions import db
@@ -9,10 +10,13 @@ from app.models import PendingAction, User
 from app.admin.approval_service import request_action, approve_action
 
 
+TEST_PASSWORD = "R8-test-password-123!"
+
+
 def make_user(email, role="delegate"):
     user = User(
         email=email,
-        password_hash="test-password-hash",
+        password_hash=hash_password(TEST_PASSWORD),
         role=role,
         is_citizen=True,
         is_enrolled=True,
@@ -20,6 +24,20 @@ def make_user(email, role="delegate"):
     db.session.add(user)
     db.session.commit()
     return user
+
+
+def _log_in_as(client, email):
+    """Log in through the application's real authentication route."""
+    response = client.post(
+        "/auth/login",
+        data={
+            "email": email,
+            "password": TEST_PASSWORD,
+        },
+    )
+    assert response.status_code == 302, (
+        f"Login failed for {email}: HTTP {response.status_code}"
+    )
 
 
 def test_self_approval_is_rejected(app):
@@ -38,6 +56,7 @@ def test_self_approval_is_rejected(app):
 
         db.session.refresh(action)
         db.session.refresh(target)
+
         assert action.status == "pending"
         assert target.is_enrolled is True
 
@@ -48,7 +67,10 @@ def test_expired_request_cannot_execute(app):
         approver = make_user("approver@example.com")
         target = make_user("voter@example.com", role="voter")
 
-        requested_at = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+        requested_at = datetime(
+            2026, 1, 1, 10, 0, tzinfo=timezone.utc
+        )
+
         action = request_action(
             requester,
             "bulk_enrolment_change",
@@ -56,7 +78,9 @@ def test_expired_request_cannot_execute(app):
             now=requested_at,
         )
 
-        with pytest.raises(ValueError, match="approval window has expired"):
+        with pytest.raises(
+            ValueError, match="approval window has expired"
+        ):
             approve_action(
                 action.id,
                 approver,
@@ -65,6 +89,7 @@ def test_expired_request_cannot_execute(app):
 
         db.session.refresh(action)
         db.session.refresh(target)
+
         assert action.status == "expired"
         assert target.is_enrolled is True
 
@@ -81,18 +106,26 @@ def test_second_delegate_executes_bulk_change_once(app):
             {"changes": [{"user_id": target.id, "is_enrolled": False}]},
         )
 
-        approve_action(action.id, approver)
+        action_id = action.id
+        approver_id = approver.id
+        requester_id = requester.id
+        target_id = target.id
+
+        approve_action(action_id, approver)
 
         db.session.refresh(action)
         db.session.refresh(target)
+
         assert action.status == "executed"
-        assert action.requested_by_id != action.approved_by_id
-        assert action.approved_by_id == approver.id
+        assert requester_id != approver_id
+        assert action.approved_by_id == approver_id
         assert action.executed_at is not None
         assert target.is_enrolled is False
 
-        with pytest.raises(ValueError, match="already been processed"):
-            approve_action(action.id, approver)
+        with pytest.raises(
+            ValueError, match="already been processed"
+        ):
+            approve_action(action_id, approver)
 
         logged_actions = db.session.execute(
             db.select(AuditLogEntry.action)
@@ -138,30 +171,29 @@ def test_candidate_exclusion_requires_second_delegate(app):
         )
 
         assert candidate.is_excluded is False
+
         approve_action(action.id, approver)
 
         db.session.refresh(candidate)
         assert candidate.is_excluded is True
 
-def _log_in_as(client, user):
-    with client.session_transaction() as session:
-        session["_user_id"] = str(user.id)
-        session["_fresh"] = True
-
 
 def test_delegate_can_request_and_approve_through_routes(app, client):
-    # Create database records inside an application context.
+    requester_email = "route-requester@example.com"
+    approver_email = "route-approver@example.com"
+    target_email = "route-voter@example.com"
+
     with app.app_context():
-        requester = make_user("route-requester@example.com")
-        approver = make_user("route-approver@example.com")
-        target = make_user("route-voter@example.com", role="voter")
+        requester = make_user(requester_email)
+        approver = make_user(approver_email)
+        target = make_user(target_email, role="voter")
 
         requester_id = requester.id
         approver_id = approver.id
         target_id = target.id
 
-    # IMPORTANT: HTTP requests are outside that application context.
-    _log_in_as(client, requester)
+    # Requester signs in through the real login route.
+    _log_in_as(client, requester_email)
 
     response = client.post(
         "/admin/actions",
@@ -184,12 +216,9 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
         assert saved_action.requested_by_id == requester_id
         assert requester_id != approver_id
 
-    # A second client signs in as the other delegate.
+    # A separate client logs in as the second delegate.
     approver_client = app.test_client()
-    _log_in_as(approver_client, approver)
-
-    with approver_client.session_transaction() as session:
-        assert session["_user_id"] == str(approver_id)
+    _log_in_as(approver_client, approver_email)
 
     response = approver_client.post(
         f"/admin/actions/{action_id}/approve"
@@ -198,31 +227,28 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["status"] == "executed"
 
+
 def test_non_delegate_cannot_approve_action(app, client):
+    requester_email = "approval-requester@example.com"
+    voter_email = "approval-voter@example.com"
+    target_id = None
+
     with app.app_context():
-        requester = make_user("approval-requester@example.com")
-        voter = make_user("approval-voter@example.com", role="voter")
+        requester = make_user(requester_email)
+        voter = make_user(voter_email, role="voter")
         target = make_user("approval-target@example.com", role="voter")
 
-        # Save IDs before the application context closes.
         voter_id = voter.id
         target_id = target.id
 
         action = request_action(
             requester,
             "bulk_enrolment_change",
-            {
-                "changes": [
-                    {"user_id": target_id, "is_enrolled": False}
-                ]
-            },
+            {"changes": [{"user_id": target_id, "is_enrolled": False}]},
         )
         action_id = action.id
 
-    # Sign in as a voter, not a delegate.
-    with client.session_transaction() as session:
-        session["_user_id"] = str(voter_id)
-        session["_fresh"] = True
+    _log_in_as(client, voter_email)
 
     response = client.post(f"/admin/actions/{action_id}/approve")
     assert response.status_code == 403
@@ -234,18 +260,18 @@ def test_non_delegate_cannot_approve_action(app, client):
         assert saved_action.status == "pending"
         assert saved_target.is_enrolled is True
 
+
 def test_non_delegate_cannot_request_action(app, client):
+    voter_email = "request-voter@example.com"
+
     with app.app_context():
-        voter = make_user("request-voter@example.com", role="voter")
+        voter = make_user(voter_email, role="voter")
         target = make_user("request-target@example.com", role="voter")
 
         voter_id = voter.id
         target_id = target.id
 
-    # Sign in as a voter, not a delegate.
-    with client.session_transaction() as session:
-        session["_user_id"] = str(voter_id)
-        session["_fresh"] = True
+    _log_in_as(client, voter_email)
 
     response = client.post(
         "/admin/actions",

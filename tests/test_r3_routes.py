@@ -51,11 +51,11 @@ def test_register_rejects_duplicate_email(client):
     assert b"could not be completed" in response.data
 
 
-def test_login_success_redirects_to_vote(client):
+def test_login_success_redirects_to_mfa_setup(client):
     register(client)
     response = login(client)
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("/vote/")
+    assert response.headers["Location"].endswith("/auth/mfa/setup")
 
 
 def test_login_wrong_password(client):

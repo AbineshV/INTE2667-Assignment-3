@@ -27,6 +27,7 @@ class User(UserMixin, db.Model):
 
     # Multi-factor authentication (R1)
     totp_secret = db.Column(db.String(255), nullable=True)
+    totp_last_used_step = db.Column(db.Integer, nullable=True)
 
     # Account lockout (R4)
     failed_login_count = db.Column(db.Integer, nullable=False, default=0)
