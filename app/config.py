@@ -1,4 +1,4 @@
-import os
+﻿import os
 from datetime import timedelta
 
 from dotenv import load_dotenv
@@ -35,6 +35,11 @@ class Config:
     SESSION_REFRESH_EACH_REQUEST = False
     SESSION_PROTECTION = "strong"
 
+    # R16: rate limiting.
+    RATELIMIT_STORAGE_URI = "memory://"
+    RATELIMIT_DEFAULT = "200 per day;50 per hour"
+    RATELIMIT_HEADERS_ENABLED = True
+
 
 class TestingConfig(Config):
     TESTING = True
@@ -42,6 +47,9 @@ class TestingConfig(Config):
     SECRET_KEY = "test-secret-key-not-for-production"
     TOTP_ENCRYPTION_KEY = "oK0x1TxiLmebjISDzxsduFcVfnwrIjqubERvcNgHu0M="
     WTF_CSRF_ENABLED = False
+
+    # R16: disable rate limiting during tests so limits don't trip other routes.
+    RATELIMIT_ENABLED = False
 
     # Test client uses HTTP rather than HTTPS.
     SESSION_COOKIE_SECURE = False

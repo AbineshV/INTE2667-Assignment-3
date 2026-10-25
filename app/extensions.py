@@ -11,3 +11,8 @@ login_manager.login_view = "auth.login"
 
 # CSRF protection for forms and state-changing requests
 csrf = CSRFProtect()
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# R16: rate limiting — keyed by client IP address
+limiter = Limiter(key_func=get_remote_address)
