@@ -24,6 +24,7 @@ from app.voting.casting import (
     has_voted,
 )
 from app.voting.models import Ballot, VoteRecord
+from app.ledger.chain import normalise_tracking_code
 
 
 @pytest.fixture
@@ -70,7 +71,7 @@ def _cast(s):
 def test_vote_is_recorded(app, setup):
     with app.app_context():
         code = _cast(setup)
-        assert len(code) == 32
+        assert normalise_tracking_code(code) == code
         assert has_voted(setup["voter_id"], setup["election_id"]) is True
 
 

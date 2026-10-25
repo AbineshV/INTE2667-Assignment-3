@@ -6,3 +6,6 @@ def init_results(app):
     app.extensions["results_signing_key"] = load_signing_key(
         app, filename="results_signing_key.pem", config_key="RESULTS_SIGNING_KEY_PATH"
     )
+
+    from app.results.cli import publish_results_command
+    app.cli.add_command(publish_results_command)

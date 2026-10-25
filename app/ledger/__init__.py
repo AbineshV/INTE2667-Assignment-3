@@ -1,7 +1,7 @@
 from app.ledger.chain import (
-    LedgerError, LedgerVerification, TrackingResult, append_ballot, lookup_tracking_code,
-    verify_ledger,
+    LedgerError, LedgerVerification, TrackingResult, append_ballot, hash_tracking_code,
+    lookup_tracking_code, stage_ballot, verify_ledger,
 )
 
 __all__ = ["LedgerError", "LedgerVerification", "TrackingResult", "append_ballot",
-           "lookup_tracking_code", "verify_ledger"]
+           "hash_tracking_code", "lookup_tracking_code", "stage_ballot", "verify_ledger"]

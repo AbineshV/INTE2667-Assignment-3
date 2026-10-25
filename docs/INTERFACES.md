@@ -81,6 +81,9 @@
 - API: `GET /results/api/<election_id>` returns `document` (the exact signed string), `signature`, `algorithm`, `key_id`
 - Public key: `GET /results/api/public-key`
 - Pages: `/results/` (list) and `/results/<election_id>` (tables plus live verification)
+- `cast_ballot()` already writes each sealed ballot to the R17 ledger in the same transaction; the code it returns is the ledger tracking code
+- Counting: `count_and_publish(election, admin, share_texts)` in `app/results/tally.py` rebuilds the ballot key from 3 of the 5 R10 shares, decrypts the ledger, counts first preferences and publishes signed results
+- From the command line: `flask --app run publish-results <election_id> --admin <email> --share <file> --share <file> --share <file>`
 - **S4:** please include `/results/api/...` in rate limiting (R16)
 
 ## Testing
