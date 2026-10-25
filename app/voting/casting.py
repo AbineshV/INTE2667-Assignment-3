@@ -17,6 +17,7 @@ never join the two.
 
 import json
 import secrets
+from datetime import date
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
@@ -28,6 +29,8 @@ from app.extensions import db
 from app.voting.models import Ballot, VoteRecord
 
 _MAX_ATTEMPTS = 5
+# R11: ballot ids are random 62-bit integers, not sequential.
+_BALLOT_ID_BITS = 62
 
 
 class BallotError(Exception):
@@ -36,6 +39,39 @@ class BallotError(Exception):
 
 class AlreadyVotedError(BallotError):
     """This voter has already voted in this election (R12)."""
+
+
+class InvalidBallotError(BallotError):
+    """The ballot's preferences are malformed (R13)."""
+
+
+def _validate_preferences(preferences, valid_ids):
+    """
+    R13: a ballot's ranked preferences must be well formed.
+
+    Each entry needs an integer candidate_id and rank. Across the ballot:
+      * every candidate must be real and not excluded;
+      * no candidate may appear twice;
+      * the ranks must be 1..N with no gaps, ties or repeats (a complete,
+        strictly ordered preference, as required for a formal House vote).
+    """
+    candidate_ids = []
+    ranks = []
+    for entry in preferences:
+        try:
+            cid = int(entry["candidate_id"])
+            rank = int(entry["rank"])
+        except (KeyError, TypeError, ValueError):
+            raise InvalidBallotError("Each preference needs a candidate_id and a rank.")
+        candidate_ids.append(cid)
+        ranks.append(rank)
+
+    if any(cid not in valid_ids for cid in candidate_ids):
+        raise InvalidBallotError("Ballot references unknown or excluded candidates.")
+    if len(set(candidate_ids)) != len(candidate_ids):
+        raise InvalidBallotError("A candidate appears more than once on the ballot.")
+    if sorted(ranks) != list(range(1, len(ranks) + 1)):
+        raise InvalidBallotError("Ranks must be 1..N with no gaps, ties or repeats.")
 
 
 def has_voted(voter_id, election_id) -> bool:
@@ -82,10 +118,9 @@ def cast_ballot(voter_id, voter_division, election_id, preferences):
     if not preferences:
         raise BallotError("No preferences submitted.")
 
+    # R13: the ranked preferences must be a well-formed, complete ordering.
     valid_ids = {c.id for c in division.candidates if not c.is_excluded}
-    submitted_ids = {int(p["candidate_id"]) for p in preferences}
-    if not submitted_ids.issubset(valid_ids):
-        raise BallotError("Ballot references unknown or excluded candidates.")
+    _validate_preferences(preferences, valid_ids)
 
     # R12: early, friendly rejection of a repeat vote.
     if has_voted(voter_id, election_id):
@@ -98,13 +133,16 @@ def cast_ballot(voter_id, voter_division, election_id, preferences):
     for attempt in range(_MAX_ATTEMPTS):
         tracking_code = _new_tracking_code()
 
-        # R11: the Ballot carries NO voter_id.
+        # R11: the Ballot carries NO voter_id, a RANDOM (non-sequential) id so
+        # its order can't be matched to a VoteRecord, and only the cast date.
         db.session.add(Ballot(
+            id=secrets.randbits(_BALLOT_ID_BITS) + 1,
             election_id=election_id,
             division_id=division.id,
             chamber=election.chamber,
             sealed_ballot=sealed,
             tracking_code=tracking_code,
+            cast_date=date.today(),
         ))
         # R12: the marker that this voter has now voted.
         db.session.add(VoteRecord(voter_id=voter_id, election_id=election_id))
@@ -135,5 +173,5 @@ def find_by_tracking_code(code):
         return None
     return {"tracking_code": ballot.tracking_code,
             "election_id": ballot.election_id,
-            "cast_at": ballot.cast_at.isoformat(),
+            "cast_date": ballot.cast_date.isoformat(),
             "included": True}
