@@ -6,6 +6,7 @@ import pyotp
 import qrcode
 from cryptography.fernet import Fernet
 from flask import current_app
+from qrcode.image.svg import SvgPathImage
 
 STEP_SECONDS = 30
 
@@ -50,5 +51,6 @@ def check_code(secret, code, now, last_used_step):
 def qr_data_uri(uri):
     buffer = io.BytesIO()
     qrcode.make(uri).save(buffer)
+    qrcode.make(uri, image_factory=SvgPathImage).save(buffer)
     encoded = base64.b64encode(buffer.getvalue()).decode()
-    return "data:image/png;base64," + encoded
+    return "data:image/svg+xml;base64," + encoded
