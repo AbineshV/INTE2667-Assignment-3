@@ -1,9 +1,11 @@
-﻿"""
+"""
 S4 - R16: Rate Limiting
 Verifies that Flask-Limiter is configured and that the limiter extension is
 present.  Full over-limit tests are skipped in TestingConfig because
 RATELIMIT_ENABLED = False there (so tests don't trip limits on other routes).
 """
+import importlib
+
 import pytest
 
 from app.config import Config, TestingConfig
@@ -60,5 +62,10 @@ class TestRateLimitRouteAnnotations:
         assert callable(index)
 
     def test_publish_has_limit_annotation(self):
-        from app.results.routes import publish
-        assert callable(publish)
+        """R16: a publish endpoint exists in the results blueprint."""
+        mod = importlib.import_module("app.results.routes")
+        # The function may be named 'publish' or similar depending on the implementation.
+        publish_fn = getattr(mod, "publish", None)
+        assert publish_fn is not None and callable(publish_fn), (
+            "Expected a callable 'publish' function in app.results.routes"
+        )
