@@ -1,11 +1,15 @@
 from flask import Blueprint, abort, jsonify, request
-from flask_login import current_user, login_required
+from flask_login import current_user
 
-from app.admin.approval_service import approve_action, request_action
+from app.access.permissions import require_roles
+from app.admin.approval_service import (
+    action_is_visible_to_division,
+    approve_action,
+    request_action,
+)
 from app.extensions import db
 from app.models import PendingAction
 
-from app.access.permissions import require_roles
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -19,6 +23,7 @@ def index():
 def require_delegate():
     if not current_user.is_authenticated:
         abort(401)
+
     if current_user.role != "delegate":
         abort(403)
 
@@ -29,9 +34,7 @@ def list_actions():
     require_delegate()
 
     status = request.args.get("status", "pending")
-    if status not in {
-        "pending", "executing", "executed", "expired"
-    }:
+    if status not in {"pending", "executing", "executed", "expired"}:
         return jsonify(error="Invalid status filter."), 400
 
     actions = db.session.execute(
@@ -39,6 +42,16 @@ def list_actions():
         .where(PendingAction.status == status)
         .order_by(PendingAction.requested_at)
     ).scalars().all()
+
+    # Only return actions whose targets belong to this delegate's division.
+    actions = [
+        action
+        for action in actions
+        if action_is_visible_to_division(
+            action,
+            current_user.division,
+        )
+    ]
 
     return jsonify([
         {
@@ -91,7 +104,11 @@ def approve_pending_action(action_id):
     except PermissionError as error:
         return jsonify(error=str(error)), 403
     except ValueError as error:
-        status_code = 404 if str(error) == "Pending action not found." else 400
+        status_code = (
+            404
+            if str(error) == "Pending action not found."
+            else 400
+        )
         return jsonify(error=str(error)), status_code
 
     return jsonify(
