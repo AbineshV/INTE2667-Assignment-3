@@ -16,31 +16,42 @@ def require_diplomatic_terminal_ip(view_func):
 
         try:
             client_ip = ipaddress.ip_address(remote_ip)
-        except ValueError:
+        except (TypeError, ValueError):
             abort(403)
 
         configured = current_app.config.get(
             "DIPLOMATIC_TERMINAL_ALLOWED_CIDRS", []
         )
 
-        if isinstance(configured, str):
+        if configured is None:
+            configured = []
+        elif isinstance(configured, str):
             configured = configured.split(",")
-
-        networks = []
-        try:
-            for entry in configured or []:
-                entry = str(entry).strip()
-                if entry:
-                    networks.append(
-                        ipaddress.ip_network(entry, strict=False)
-                    )
-        except ValueError:
+        elif not isinstance(configured, (list, tuple, set)):
             current_app.logger.error(
                 "Invalid diplomatic-terminal IP allowlist configuration."
             )
             abort(403)
 
-        # An empty allowlist denies everyone.
+        networks = []
+
+        try:
+            for entry in configured:
+                if not isinstance(entry, str):
+                    raise ValueError("CIDR entries must be strings.")
+
+                entry = entry.strip()
+                if entry:
+                    networks.append(
+                        ipaddress.ip_network(entry, strict=False)
+                    )
+
+        except (TypeError, ValueError):
+            current_app.logger.error(
+                "Invalid diplomatic-terminal IP allowlist configuration."
+            )
+            abort(403)
+
         allowed = any(
             client_ip.version == network.version
             and client_ip in network
