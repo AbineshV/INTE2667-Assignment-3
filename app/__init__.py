@@ -1,4 +1,4 @@
-import time
+﻿import time
 
 from flask import (
     Flask,
@@ -11,7 +11,7 @@ from flask import (
 from flask_login import current_user, logout_user
 
 from app.config import Config
-from app.extensions import db, login_manager, csrf
+from app.extensions import db, login_manager, csrf, limiter
 
 
 def create_app(config_class=Config):
@@ -34,6 +34,9 @@ def create_app(config_class=Config):
 
     csrf.init_app(app)
 
+    # R16: rate limiting.
+    limiter.init_app(app)
+
     # Audit log signing key (R18).
     from app.audit import init_audit
     init_audit(app)
@@ -46,7 +49,7 @@ def create_app(config_class=Config):
     from app.results import init_results
     init_results(app)
 
-    # Ballot sealing key (R9 – S3).
+    # Ballot sealing key (R9 â€“ S3).
     from app.voting import init_voting
     init_voting(app)
 
