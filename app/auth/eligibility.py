@@ -7,6 +7,7 @@ Sources: Venkatesan Req 15, a1-sss R03, Aravind A2 T01.
 """
 
 from datetime import date
+from app.audit import log_event  # match the path used in tests/test_audit_log.py
 
 MINIMUM_AGE = 18
 
@@ -68,3 +69,20 @@ def check_eligibility(user, today=None):
         return False, NO_DIVISION
 
     return True, None
+
+def check_and_log_eligibility(user, today=None):
+    """Check eligibility and record any refusal in the signed audit log.
+
+    Returns the same tuple as check_eligibility: (True, None) or
+    (False, reason_code). Only the reason code is logged, never the
+    voter's date of birth, name or division.
+    """
+    eligible, reason = check_eligibility(user, today)
+    if not eligible:
+        log_event(
+            actor=user.email if user is not None else "unknown",
+            action="eligibility.denied",
+            target=str(user.id) if user is not None else None,
+            details={"reason": reason},
+        )
+    return eligible, reason

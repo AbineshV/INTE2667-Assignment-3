@@ -1,6 +1,8 @@
+import json
 from datetime import date
 from types import SimpleNamespace
 
+from app.audit.models import AuditLogEntry
 from app.auth.eligibility import (
     NO_DIVISION,
     NO_DOB,
@@ -9,8 +11,11 @@ from app.auth.eligibility import (
     NOT_ENROLLED,
     UNDER_AGE,
     calculate_age,
+    check_and_log_eligibility,
     check_eligibility,
 )
+from app.extensions import db
+from app.models import User
 
 TODAY = date(2026, 10, 26)
 
@@ -106,3 +111,55 @@ def test_age_on_birthday():
 
 def test_age_day_after_birthday():
     assert calculate_age(date(2008, 10, 25), TODAY) == 18
+
+def save_user(**changes):
+    """Save a real User to the test database; call inside app.app_context()."""
+    fields = dict(
+        email="voter@example.com",
+        password_hash="not-a-real-hash",
+        is_enrolled=True,
+        is_citizen=True,
+        date_of_birth=date(1990, 5, 1),
+        division="Melbourne",
+    )
+    fields.update(changes)
+    user = User(**fields)
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+def test_refusal_is_logged_with_reason_only(app):
+    with app.app_context():
+        user = save_user(is_enrolled=False)
+        before = AuditLogEntry.query.count()
+
+        assert check_and_log_eligibility(user, TODAY) == (False, NOT_ENROLLED)
+
+        assert AuditLogEntry.query.count() == before + 1
+        entry = AuditLogEntry.query.order_by(AuditLogEntry.id.desc()).first()
+        assert entry.action == "eligibility.denied"
+        assert json.loads(entry.details)["reason"] == NOT_ENROLLED
+        assert "Melbourne" not in str(entry.details)
+        assert "1990" not in str(entry.details)
+
+
+def test_success_is_not_logged(app):
+    with app.app_context():
+        user = save_user()
+        before = AuditLogEntry.query.count()
+
+        assert check_and_log_eligibility(user, TODAY) == (True, None)
+
+        assert AuditLogEntry.query.count() == before
+
+
+def test_refusal_of_missing_user_is_logged(app):
+    with app.app_context():
+        before = AuditLogEntry.query.count()
+
+        assert check_and_log_eligibility(None, TODAY) == (False, NO_USER)
+
+        assert AuditLogEntry.query.count() == before + 1
+        entry = AuditLogEntry.query.order_by(AuditLogEntry.id.desc()).first()
+        assert json.loads(entry.details)["reason"] == NO_USER
