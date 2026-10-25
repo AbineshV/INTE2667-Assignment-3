@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Vote | Electronic Voting Platform{% endblock %}
+
+{% block main %}
+  <div class="card card-wide">
+    <h1>Your elections</h1>
+    <p class="lead">Elections open for voting in your division. Each election accepts one ballot per voter.</p>
+
+    {% if elections %}
+      <table>
+        <thead>
+          <tr><th>Election</th><th>Chamber</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for e in elections %}
+            <tr>
+              <td>{{ e.name }}</td>
+              <td>{{ e.chamber | capitalize }}</td>
+              <td>{% if e.has_voted %}Voted{% else %}Open{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert"><p>No elections are open for voting right now.</p></div>
+    {% endif %}
+
+    <p class="hint api-links">
+      Already voted? Check your ballot was recorded on the
+      <a href="{{ url_for('results.track') }}">Track ballot</a> page.
+    </p>
+  </div>
+{% endblock %}
