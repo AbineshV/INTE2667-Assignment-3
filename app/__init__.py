@@ -36,13 +36,15 @@ def create_app(config_class=Config):
 
     # Audit log signing key (R18).
     from app.audit import init_audit
-
     init_audit(app)
 
     # Election definition signing key (R19).
     from app.elections import init_elections
-
     init_elections(app)
+
+    # Results signing key (R20).
+    from app.results import init_results
+    init_results(app)
 
     # Blueprints.
     from app.auth.routes import bp as auth_bp
@@ -57,7 +59,7 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_bp)
     app.register_blueprint(results_bp)
 
-    # R8: enforce a 30-minute inactivity timeout for authenticated sessions.
+    # R8: enforce a 30-minute inactivity timeout.
     @app.before_request
     def enforce_session_inactivity_timeout():
         """Log out authenticated users after prolonged inactivity."""
@@ -70,8 +72,7 @@ def create_app(config_class=Config):
             app.permanent_session_lifetime.total_seconds()
         )
 
-        # Reject sessions with missing, invalid, expired or future
-        # activity timestamps.
+        # Reject missing, invalid, expired or future timestamps.
         if (
             not isinstance(last_activity, int)
             or isinstance(last_activity, bool)
@@ -82,13 +83,13 @@ def create_app(config_class=Config):
             session.clear()
             return redirect(url_for("auth.login"))
 
-        # Update activity after the session passes the timeout check.
+        # Refresh activity after a valid request.
         session["last_activity"] = now
         session.permanent = True
 
         return None
 
-    # R5: enforce an explicit access policy for every application route.
+    # R5: enforce explicit access policy for every application route.
     @app.before_request
     def enforce_explicit_access_policy():
         endpoint = request.endpoint
@@ -107,11 +108,11 @@ def create_app(config_class=Config):
         if view_func is None:
             abort(403)
 
-        # Permit routes explicitly marked public.
+        # Permit explicitly public routes.
         if getattr(view_func, "is_public_endpoint", False):
             return None
 
-        # Routes with explicit role policies are checked by their decorators.
+        # Explicit role policies are checked by their decorators.
         if getattr(view_func, "allowed_roles", None):
             return None
 
@@ -123,6 +124,8 @@ def create_app(config_class=Config):
         from app import models  # noqa: F401
         from app.audit import models as audit_models  # noqa: F401
         from app.elections import models as election_models  # noqa: F401
+        from app.ledger import models as ledger_models  # noqa: F401
+        from app.results import models as results_models  # noqa: F401
 
         db.create_all()
 
