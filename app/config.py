@@ -8,6 +8,7 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY")
+    TOTP_ENCRYPTION_KEY = os.environ.get("TOTP_ENCRYPTION_KEY")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL", "sqlite:///voting.db"
     )
@@ -39,6 +40,7 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SECRET_KEY = "test-secret-key-not-for-production"
+    TOTP_ENCRYPTION_KEY = "oK0x1TxiLmebjISDzxsduFcVfnwrIjqubERvcNgHu0M="
     WTF_CSRF_ENABLED = False
 
     # Test client uses HTTP rather than HTTPS.

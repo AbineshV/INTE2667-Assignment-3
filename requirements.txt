@@ -18,8 +18,10 @@ packaging==26.3
 pluggy==1.6.0
 pycparser==3.11
 Pygments==2.21.0
+PyOTP==2.10.0
 pytest==9.0.3
 python-dotenv==1.2.2
+qrcode==8.2
 SQLAlchemy==2.0.54
 tomli==2.5.0
 typing_extensions==4.16.0

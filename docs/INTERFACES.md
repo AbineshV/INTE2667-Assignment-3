@@ -65,3 +65,14 @@
 - S3: has_voted field (R12)
 - S4: rate limiting (R16)
 - S5: election and candidate models (R19)
+
+## Multi-factor authentication (R1)
+
+- A user has MFA enabled when `User.totp_secret` is set (not `None`).
+  The value is Fernet-encrypted; never read or compare it directly.
+- Login for MFA users is two-step: after the password, the session holds only
+  `mfa_user_id` and `mfa_started`. `login_user` is called only after a correct
+  code, so `@login_required` routes stay closed until both factors pass.
+- Staff-only routes can require MFA in the role decorator (S2, R5), for example:
+  refuse access when `current_user.role != "voter" and not current_user.totp_secret`.
+- Users without MFA are sent to `/auth/mfa/setup` after login.
