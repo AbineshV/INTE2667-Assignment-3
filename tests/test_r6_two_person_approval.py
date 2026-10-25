@@ -13,11 +13,13 @@ from app.admin.approval_service import request_action, approve_action
 TEST_PASSWORD = "R8-test-password-123!"
 
 
-def make_user(email, role="delegate"):
+def make_user(email, role="delegate", division="D01"):
+    """Create a test user with an explicit division."""
     user = User(
         email=email,
         password_hash=hash_password(TEST_PASSWORD),
         role=role,
+        division=division,
         is_citizen=True,
         is_enrolled=True,
     )
@@ -150,7 +152,7 @@ def test_candidate_exclusion_requires_second_delegate(app):
 
         division = Division(
             election_id=election.id,
-            name="Test division",
+            name="D01",
         )
         db.session.add(division)
         db.session.commit()
@@ -192,7 +194,6 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
         approver_id = approver.id
         target_id = target.id
 
-    # Requester signs in through the real login route.
     _log_in_as(client, requester_email)
 
     response = client.post(
@@ -216,7 +217,6 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
         assert saved_action.requested_by_id == requester_id
         assert requester_id != approver_id
 
-    # A separate client logs in as the second delegate.
     approver_client = app.test_client()
     _log_in_as(approver_client, approver_email)
 
@@ -231,7 +231,6 @@ def test_delegate_can_request_and_approve_through_routes(app, client):
 def test_non_delegate_cannot_approve_action(app, client):
     requester_email = "approval-requester@example.com"
     voter_email = "approval-voter@example.com"
-    target_id = None
 
     with app.app_context():
         requester = make_user(requester_email)
@@ -295,3 +294,145 @@ def test_non_delegate_cannot_request_action(app, client):
         ).scalar_one_or_none()
 
         assert action is None
+
+
+def test_delegate_cannot_request_change_for_another_division(app):
+    with app.app_context():
+        requester = make_user(
+            "cross-division-requester@example.com",
+            division="D01",
+        )
+        target = make_user(
+            "other-division-voter@example.com",
+            role="voter",
+            division="D02",
+        )
+
+        with pytest.raises(PermissionError, match="assigned division"):
+            request_action(
+                requester,
+                "bulk_enrolment_change",
+                {
+                    "changes": [
+                        {"user_id": target.id, "is_enrolled": False}
+                    ]
+                },
+            )
+
+        assert db.session.execute(
+            db.select(PendingAction).where(
+                PendingAction.requested_by_id == requester.id
+            )
+        ).scalar_one_or_none() is None
+
+        db.session.refresh(target)
+        assert target.is_enrolled is True
+
+
+def test_delegate_cannot_approve_change_for_another_division(app):
+    with app.app_context():
+        requester = make_user(
+            "same-division-requester@example.com",
+            division="D01",
+        )
+        approver = make_user(
+            "other-division-approver@example.com",
+            division="D02",
+        )
+        target = make_user(
+            "same-division-voter@example.com",
+            role="voter",
+            division="D01",
+        )
+
+        action = request_action(
+            requester,
+            "bulk_enrolment_change",
+            {"changes": [{"user_id": target.id, "is_enrolled": False}]},
+        )
+        action_id = action.id
+
+        with pytest.raises(PermissionError, match="assigned division"):
+            approve_action(action_id, approver)
+
+        db.session.refresh(action)
+        db.session.refresh(target)
+
+        assert action.status == "pending"
+        assert action.approved_by_id is None
+        assert action.executed_at is None
+        assert target.is_enrolled is True
+
+
+def test_delegate_cannot_exclude_candidate_in_another_division(app):
+    with app.app_context():
+        requester = make_user(
+            "candidate-requester@example.com",
+            division="D01",
+        )
+
+        election = Election(
+            name="Cross-division election",
+            chamber="house",
+            created_by_id=requester.id,
+        )
+        db.session.add(election)
+        db.session.commit()
+
+        division = Division(
+            election_id=election.id,
+            name="D02",
+        )
+        db.session.add(division)
+        db.session.commit()
+
+        candidate = Candidate(
+            division_id=division.id,
+            name="Other division candidate",
+            party="Example Party",
+            position=1,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+
+        with pytest.raises(PermissionError, match="assigned division"):
+            request_action(
+                requester,
+                "candidate_exclusion",
+                {"candidate_id": candidate.id},
+            )
+
+        db.session.refresh(candidate)
+        assert candidate.is_excluded is False
+
+
+def test_delegate_cannot_move_user_to_another_division(app):
+    with app.app_context():
+        requester = make_user(
+            "division-change-requester@example.com",
+            division="D01",
+        )
+        target = make_user(
+            "division-change-target@example.com",
+            role="voter",
+            division="D01",
+        )
+
+        with pytest.raises(
+            PermissionError, match="outside their assigned division"
+        ):
+            request_action(
+                requester,
+                "bulk_enrolment_change",
+                {
+                    "changes": [
+                        {
+                            "user_id": target.id,
+                            "division": "D02",
+                        }
+                    ]
+                },
+            )
+
+        db.session.refresh(target)
+        assert target.division == "D01"
