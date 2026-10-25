@@ -1,5 +1,6 @@
-from app.security.network_access import require_diplomatic_terminal_ip
 from app.access.permissions import public_endpoint
+from app.security.network_access import require_diplomatic_terminal_ip
+
 
 def _register_terminal_route(app):
     @app.get("/test-diplomatic-terminal")
@@ -64,6 +65,64 @@ def test_malformed_allowlist_denies_access(app, client):
 
     assert response.status_code == 403
 
+
+def test_invalid_client_ip_is_denied(app, client):
+    app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = [
+        "192.0.2.0/24"
+    ]
+    _register_terminal_route(app)
+
+    response = client.get(
+        "/test-diplomatic-terminal",
+        environ_overrides={"REMOTE_ADDR": "not-an-ip"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_ipv6_allowlisted_ip_is_permitted(app, client):
+    app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = [
+        "2001:db8::/32"
+    ]
+    _register_terminal_route(app)
+
+    response = client.get(
+        "/test-diplomatic-terminal",
+        environ_overrides={"REMOTE_ADDR": "2001:db8::25"},
+    )
+
+    assert response.status_code == 200
+
+
+def test_ipv4_does_not_match_ipv6_allowlist(app, client):
+    app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = [
+        "2001:db8::/32"
+    ]
+    _register_terminal_route(app)
+
+    response = client.get(
+        "/test-diplomatic-terminal",
+        environ_overrides={"REMOTE_ADDR": "192.0.2.20"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_spoofed_forwarded_header_does_not_grant_access(app, client):
+    app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = [
+        "192.0.2.20/32"
+    ]
+    _register_terminal_route(app)
+
+    response = client.get(
+        "/test-diplomatic-terminal",
+        environ_overrides={"REMOTE_ADDR": "198.51.100.10"},
+        headers={"X-Forwarded-For": "192.0.2.20"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_real_terminal_route_denies_by_default(app, client):
     app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = []
 
@@ -89,3 +148,13 @@ def test_real_terminal_route_allows_configured_ip(app, client):
     assert response.get_data(as_text=True) == (
         "Diplomatic terminal access permitted."
     )
+def test_non_iterable_allowlist_denies_access(app, client):
+    app.config["DIPLOMATIC_TERMINAL_ALLOWED_CIDRS"] = 42
+    _register_terminal_route(app)
+
+    response = client.get(
+        "/test-diplomatic-terminal",
+        environ_overrides={"REMOTE_ADDR": "192.0.2.20"},
+    )
+
+    assert response.status_code == 403
