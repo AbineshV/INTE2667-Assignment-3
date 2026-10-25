@@ -1,33 +1,51 @@
-from app.access.permissions import public_endpoint, require_roles
 from datetime import date
+
+import pyotp
+from cryptography.fernet import InvalidToken
 from flask import (
-    Blueprint, flash, redirect, render_template, request, url_for, session
+    Blueprint,
+    flash,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
 )
-from flask_login import login_user, logout_user
+from flask_login import current_user, login_user, logout_user
 from sqlalchemy.exc import IntegrityError
-from flask import (Blueprint, flash, make_response, redirect, render_template,
-                   request, session, url_for)
-from flask_login import current_user, login_required, login_user, logout_user
 
-from app.auth.mfa import (check_code, decrypt_secret, encrypt_secret,
-                          generate_secret, qr_data_uri)
-
-from app.auth.passwords import hash_password, needs_rehash, validate_password, verify_password
+from app.access.permissions import public_endpoint, require_roles
+from app.auth.lockout import (
+    is_locked,
+    record_failed_login,
+    reset_failed_logins,
+    utc_now,
+)
+from app.auth.mfa import (
+    check_code,
+    decrypt_secret,
+    encrypt_secret,
+    generate_secret,
+    qr_data_uri,
+)
+from app.auth.passwords import (
+    hash_password,
+    needs_rehash,
+    validate_password,
+    verify_password,
+)
 from app.extensions import db
 from app.models import User
-from app.auth.lockout import is_locked, record_failed_login, reset_failed_logins, utc_now
 
 
-import pyotp 
-from cryptography.fernet import InvalidToken
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-
-# Hash of a random value, used so unknown emails take as long as wrong passwords
+# Hash of a random value, used so unknown emails take as long
+# as wrong passwords.
 _DUMMY_HASH = hash_password("dummy-password-for-timing-only")
 
-
-MFA_TIMEOUT_SECONDS = 300  # 5 minutes to enter the code
+MFA_TIMEOUT_SECONDS = 300  # Five minutes to enter the code.
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -47,8 +65,8 @@ def login():
         return render_template("auth/login.html"), 401
 
     if is_locked(user, now):
-        verify_password(_DUMMY_HASH, password)  # same timing; real password not checked
-        # TODO: audit log via S5's logger
+        verify_password(_DUMMY_HASH, password)
+        # TODO: audit log via S5's logger.
         flash("Invalid email or password.", "error")
         return render_template("auth/login.html"), 401
 
@@ -62,21 +80,28 @@ def login():
         user.password_hash = hash_password(password)
 
     if user.totp_secret:
-        # Password correct, but not logged in until the code is checked.
-        # Failed count is NOT reset here, so MFA guesses still lead to lockout.
+        # Password is correct, but login is not completed until MFA passes.
+        # Failed login counts are not reset until successful MFA verification.
         db.session.commit()
-        session.clear()  # R8: discard pre-login session state
+        session.clear()
         session["mfa_user_id"] = user.id
         session["mfa_started"] = int(now.timestamp())
         return redirect(url_for("auth.mfa_verify"))
 
     reset_failed_logins(user)
     db.session.commit()
-    session.clear()  # R8: discard pre-login session state
+
+    # Discard pre-login session state before establishing authentication.
+    session.clear()
     login_user(user, fresh=True)
     session.permanent = True
+
+    # R8: initialise the inactivity timer after successful authentication.
+    session["last_activity"] = int(now.timestamp())
+
     flash("Logged in. Please set up two-factor authentication.", "success")
     return redirect(url_for("auth.mfa_setup"))
+
 
 @bp.route("/logout", methods=["POST"])
 @require_roles("voter", "officer", "delegate", "admin")
@@ -89,10 +114,16 @@ def logout():
 
 def _render_mfa_setup(secret, status=200):
     uri = pyotp.TOTP(secret).provisioning_uri(
-        name=current_user.email, issuer_name="E-Voting Prototype"
+        name=current_user.email,
+        issuer_name="E-Voting Prototype",
     )
+
     response = make_response(
-        render_template("auth/mfa_setup.html", qr=qr_data_uri(uri), secret=secret),
+        render_template(
+            "auth/mfa_setup.html",
+            qr=qr_data_uri(uri),
+            secret=secret,
+        ),
         status,
     )
     response.headers["Cache-Control"] = "no-store"
@@ -108,12 +139,19 @@ def mfa_setup():
 
     if "pending_totp_secret" not in session:
         session["pending_totp_secret"] = encrypt_secret(generate_secret())
+
     secret = decrypt_secret(session["pending_totp_secret"])
 
     if request.method == "GET":
         return _render_mfa_setup(secret)
 
-    step = check_code(secret, request.form.get("code", ""), utc_now(), None)
+    step = check_code(
+        secret,
+        request.form.get("code", ""),
+        utc_now(),
+        None,
+    )
+
     if step is None:
         flash("Invalid code.", "error")
         return _render_mfa_setup(secret, 400)
@@ -147,10 +185,12 @@ def mfa_verify():
 
     if user_id is None or started is None:
         return _restart_login()
+
     if int(now.timestamp()) - started > MFA_TIMEOUT_SECONDS:
         return _restart_login()
 
     user = db.session.get(User, user_id)
+
     if user is None:
         return _restart_login()
 
@@ -158,7 +198,7 @@ def mfa_verify():
         return _restart_login()
 
     if is_locked(user, now):
-        # TODO: audit log via S5's logger
+        # TODO: audit log via S5's logger.
         flash("Invalid email or password.", "error")
         return render_template("auth/mfa_verify.html"), 401
 
@@ -167,9 +207,15 @@ def mfa_verify():
 
     try:
         secret = decrypt_secret(user.totp_secret)
-        step = check_code(secret, request.form.get("code", ""), now, user.totp_last_used_step)
+        step = check_code(
+            secret,
+            request.form.get("code", ""),
+            now,
+            user.totp_last_used_step,
+        )
     except InvalidToken:
-        # TODO: audit log via S5's logger (stored secret could not be decrypted)
+        # The stored secret could not be decrypted.
+        # TODO: audit log via S5's logger.
         step = None
 
     if step is None:
@@ -181,9 +227,15 @@ def mfa_verify():
     user.totp_last_used_step = step
     reset_failed_logins(user)
     db.session.commit()
-    session.clear()  # R8: also removes the MFA keys
+
+    # Establish a clean authenticated session only after MFA succeeds.
+    session.clear()
     login_user(user, fresh=True)
     session.permanent = True
+
+    # R8: initialise the inactivity timer after successful MFA.
+    session["last_activity"] = int(now.timestamp())
+
     flash("Logged in.", "success")
     return redirect(url_for("voting.index"))
 
@@ -207,12 +259,15 @@ def register():
 
     if password != confirm:
         errors.append("Passwords do not match.")
+
     errors.extend(validate_password(password))
 
     try:
         date_of_birth = date.fromisoformat(dob_text)
+
         if date_of_birth > date.today():
             errors.append("Date of birth cannot be in the future.")
+
     except ValueError:
         errors.append("Enter a valid date of birth.")
 
@@ -222,6 +277,7 @@ def register():
     if errors:
         for message in errors:
             flash(message, "error")
+
         return render_template("auth/register.html"), 400
 
     user = User(
@@ -231,11 +287,16 @@ def register():
         division=division,
     )
     db.session.add(user)
+
     try:
         db.session.commit()
+
     except IntegrityError:
         db.session.rollback()
-        flash("Registration could not be completed. Try again or log in.", "error")
+        flash(
+            "Registration could not be completed. Try again or log in.",
+            "error",
+        )
         return render_template("auth/register.html"), 400
 
     flash("Registration successful. Please log in.", "success")

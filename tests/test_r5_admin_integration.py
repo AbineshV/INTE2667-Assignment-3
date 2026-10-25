@@ -64,3 +64,35 @@ def test_unclassified_route_is_denied(app, client):
     response = client.get("/r5-test-unclassified")
 
     assert response.status_code == 403
+
+def test_officer_can_access_own_division(app, client):
+    sign_in_as(app, client, "officer", division="D01")
+
+    response = client.get("/enrolment/divisions/D01")
+
+    assert response.status_code == 200
+    assert b"D01" in response.data
+
+
+def test_officer_cannot_access_another_division(app, client):
+    sign_in_as(app, client, "officer", division="D01")
+
+    response = client.get("/enrolment/divisions/D02")
+
+    assert response.status_code == 403
+
+
+def test_admin_can_access_another_division(app, client):
+    sign_in_as(app, client, "admin", division="D01")
+
+    response = client.get("/enrolment/divisions/D02")
+
+    assert response.status_code == 200
+
+
+def test_voter_cannot_access_division_route(app, client):
+    sign_in_as(app, client, "voter", division="D01")
+
+    response = client.get("/enrolment/divisions/D01")
+
+    assert response.status_code == 403
